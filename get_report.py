@@ -201,7 +201,7 @@ def get_filtered_messages(current_hour):
     messages = {name: [] for name in all_current_sheets}  # Khởi tạo dictionary để lưu message theo sheet name
     EXCLUDED_SHEETS = ["iX000s iSSale TTS Base.XoắnNỆN50k*CấuTrúcVolunt", "iX000s iSSale gbBOSS AH*AU*cOL*YeuCauTop-iUp*KTra"]
 
-    for sheet_name in sheet_names:
+    for sheet_name in all_current_sheets:
         try:
             if sheet_name in EXCLUDED_SHEETS:
                 continue
@@ -301,8 +301,11 @@ if __name__ == "__main__":
         messages = get_filtered_messages(14)
         combined_msgs = combine_messages(messages)  # Gộp message
 
+        # QUAN TRỌNG: Lấy lại danh sách sheet mới nhất để gửi tin
+        final_sheets = [s.title for s in spreadsheet.worksheets()]
+
         print(f"\n✅ Báo cáo lọc được lúc 14h:")
-        for sheet_name in sheet_names:
+        for sheet_name in final_sheets:
             try:
                 print(f"\n{'='*50}")
                 print(f"[ {sheet_name} ]")
@@ -317,8 +320,11 @@ if __name__ == "__main__":
         messages = get_filtered_messages(8)
         combined_msgs = combine_messages(messages)  # Gộp message
 
+        # QUAN TRỌNG: Lấy lại danh sách sheet mới nhất để gửi tin
+        final_sheets = [s.title for s in spreadsheet.worksheets()]
+
         print(f"\n✅ Báo cáo lọc được lúc 8h:")
-        for sheet_name in sheet_names:
+        for sheet_name in final_sheets:
             try:
                 print(f"\n{'='*50}")
                 print(f"[ {sheet_name} ]")
