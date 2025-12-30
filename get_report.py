@@ -195,7 +195,10 @@ def get_filtered_messages(current_hour):
     tz = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz)
 
-    messages = {sheet_name: [] for sheet_name in sheet_names}  # Khởi tạo dictionary để lưu message theo sheet name
+# Lấy danh sách sheet MỚI NHẤT tại đây
+    all_current_sheets = [s.title for s in spreadsheet.worksheets()]
+    
+    messages = {name: [] for name in all_current_sheets}  # Khởi tạo dictionary để lưu message theo sheet name
     EXCLUDED_SHEETS = ["iX000s iSSale TTS Base.XoắnNỆN50k*CấuTrúcVolunt", "iX000s iSSale gbBOSS AH*AU*cOL*YeuCauTop-iUp*KTra"]
 
     for sheet_name in sheet_names:
@@ -294,36 +297,55 @@ if __name__ == "__main__":
     
     current_hour = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).hour
 
-    if current_hour == 14:
-        messages = get_filtered_messages(14)
-        combined_msgs = combine_messages(messages)  # Gộp message
+    # Chấp nhận cả 2 khung giờ 8h và 14h
+    if current_hour in [8, 14]:
+        messages = get_filtered_messages(current_hour)
+        combined_msgs = combine_messages(messages)
 
-        print(f"\n✅ Báo cáo lọc được lúc 14h:")
-        for sheet_name in sheet_names:
-            try:
-                print(f"\n{'='*50}")
-                print(f"[ {sheet_name} ]")
-                print(combined_msgs[sheet_name])
-                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
-                send_message(driver, message)
-            except:
-                continue
-        create_or_update_report_sheet(messages)  # Lưu kết quả vào sheet mới
+        # Lấy lại danh sách sheet một lần nữa để đảm bảo không sót nhóm nào
+        final_sheets = [s.title for s in spreadsheet.worksheets()]
 
-    elif current_hour == 8:
-        messages = get_filtered_messages(8)
-        combined_msgs = combine_messages(messages)  # Gộp message
+        print(f"\n✅ Báo cáo lọc được lúc {current_hour}h:")
+        for sheet_name in final_sheets:
+            # Kiểm tra: Sheet có tin nhắn và không nằm trong danh sách loại trừ
+            if sheet_name in combined_msgs and combined_msgs[sheet_name]:
+                try:
+                    print(f"--- Đang gửi report nhóm: {sheet_name} ---")
+                    message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+                    send_message(driver, message)
+                except Exception as e:
+                    print(f"❌ Lỗi gửi nhóm {sheet_name}: {e}")
+                    continue
+    # if current_hour == 14:
+    #     messages = get_filtered_messages(14)
+    #     combined_msgs = combine_messages(messages)  # Gộp message
 
-        print(f"\n✅ Báo cáo lọc được lúc 8h:")
-        for sheet_name in sheet_names:
-            try:
-                print(f"\n{'='*50}")
-                print(f"[ {sheet_name} ]")
-                print(combined_msgs[sheet_name])
-                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
-                send_message(driver, message)
-            except:
-                continue
+    #     print(f"\n✅ Báo cáo lọc được lúc 14h:")
+    #     for sheet_name in sheet_names:
+    #         try:
+    #             print(f"\n{'='*50}")
+    #             print(f"[ {sheet_name} ]")
+    #             print(combined_msgs[sheet_name])
+    #             message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+    #             send_message(driver, message)
+    #         except:
+    #             continue
+    #     create_or_update_report_sheet(messages)  # Lưu kết quả vào sheet mới
+
+    # elif current_hour == 8:
+    #     messages = get_filtered_messages(8)
+    #     combined_msgs = combine_messages(messages)  # Gộp message
+
+    #     print(f"\n✅ Báo cáo lọc được lúc 8h:")
+    #     for sheet_name in sheet_names:
+    #         try:
+    #             print(f"\n{'='*50}")
+    #             print(f"[ {sheet_name} ]")
+    #             print(combined_msgs[sheet_name])
+    #             message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+    #             send_message(driver, message)
+    #         except:
+    #             continue
         create_or_update_report_sheet(messages)  # Lưu kết quả vào sheet mới
     
     driver.quit()
