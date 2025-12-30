@@ -226,15 +226,15 @@ def get_filtered_messages(current_hour):
                         continue
 
                     if current_hour == 8:
-                        # Lọc từ 13h hôm qua đến 1h sáng hôm nay
+                        # Lọc từ 13h hôm qua đến 5h sáng hôm nay
                         start_time = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0))  # 13h hôm qua
-                        end_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
+                        end_time = datetime.datetime.combine(now.date(), datetime.time(5, 0))  # 5h sáng hôm nay
                         if start_time <= full_datetime < end_time:
                             messages[sheet_name].append(content)
 
                     elif current_hour == 14:
-                        # Lọc từ 1h sáng đến 13h hôm nay
-                        start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
+                        # Lọc từ 7h sáng đến 13h hôm nay
+                        start_time = datetime.datetime.combine(now.date(), datetime.time(7, 0))  # 7h sáng hôm nay
                         end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0))  # 13h hôm nay
                         if start_time <= full_datetime < end_time:
                             messages[sheet_name].append(content)
