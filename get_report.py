@@ -195,13 +195,10 @@ def get_filtered_messages(current_hour):
     tz = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz)
 
-# Lấy danh sách sheet MỚI NHẤT tại đây
-    all_current_sheets = [s.title for s in spreadsheet.worksheets()]
-    
-    messages = {name: [] for name in all_current_sheets}  # Khởi tạo dictionary để lưu message theo sheet name
+    messages = {sheet_name: [] for sheet_name in sheet_names}  # Khởi tạo dictionary để lưu message theo sheet name
     EXCLUDED_SHEETS = ["iX000s iSSale TTS Base.XoắnNỆN50k*CấuTrúcVolunt", "iX000s iSSale gbBOSS AH*AU*cOL*YeuCauTop-iUp*KTra"]
 
-    for sheet_name in all_current_sheets:
+    for sheet_name in sheet_names:
         try:
             if sheet_name in EXCLUDED_SHEETS:
                 continue
@@ -226,15 +223,15 @@ def get_filtered_messages(current_hour):
                         continue
 
                     if current_hour == 8:
-                        # Lọc từ 13h hôm qua đến 5h sáng hôm nay
+                        # Lọc từ 13h hôm qua đến 1h sáng hôm nay
                         start_time = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0))  # 13h hôm qua
-                        end_time = datetime.datetime.combine(now.date(), datetime.time(5, 0))  # 5h sáng hôm nay
+                        end_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
                         if start_time <= full_datetime < end_time:
                             messages[sheet_name].append(content)
 
                     elif current_hour == 14:
-                        # Lọc từ 7h sáng đến 13h hôm nay
-                        start_time = datetime.datetime.combine(now.date(), datetime.time(7, 0))  # 7h sáng hôm nay
+                        # Lọc từ 1h sáng đến 13h hôm nay
+                        start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
                         end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0))  # 13h hôm nay
                         if start_time <= full_datetime < end_time:
                             messages[sheet_name].append(content)
@@ -301,11 +298,8 @@ if __name__ == "__main__":
         messages = get_filtered_messages(14)
         combined_msgs = combine_messages(messages)  # Gộp message
 
-        # QUAN TRỌNG: Lấy lại danh sách sheet mới nhất để gửi tin
-        final_sheets = [s.title for s in spreadsheet.worksheets()]
-
         print(f"\n✅ Báo cáo lọc được lúc 14h:")
-        for sheet_name in final_sheets:
+        for sheet_name in sheet_names:
             try:
                 print(f"\n{'='*50}")
                 print(f"[ {sheet_name} ]")
@@ -320,11 +314,8 @@ if __name__ == "__main__":
         messages = get_filtered_messages(8)
         combined_msgs = combine_messages(messages)  # Gộp message
 
-        # QUAN TRỌNG: Lấy lại danh sách sheet mới nhất để gửi tin
-        final_sheets = [s.title for s in spreadsheet.worksheets()]
-
         print(f"\n✅ Báo cáo lọc được lúc 8h:")
-        for sheet_name in final_sheets:
+        for sheet_name in sheet_names:
             try:
                 print(f"\n{'='*50}")
                 print(f"[ {sheet_name} ]")
