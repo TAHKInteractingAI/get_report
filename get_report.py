@@ -236,7 +236,7 @@ def get_filtered_messages(current_hour):
                         if start_time <= full_datetime < end_time:
                             messages[sheet_name].append(content)
 
-                    elif current_hour == 14:
+                    elif current_hour == 10:
                         # Lọc từ 1h sáng đến 13h hôm nay
                         start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
                         end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0))  # 13h hôm nay
