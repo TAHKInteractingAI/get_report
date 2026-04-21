@@ -448,11 +448,11 @@ if __name__ == "__main__":
 
     current_hour = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).hour
 
-    if current_hour == 14:
-        messages = get_filtered_messages(14)
+    if current_hour == 10:
+        messages = get_filtered_messages(10)
         combined_msgs = combine_messages(messages)  # Gộp message
 
-        print(f"\n✅ Báo cáo lọc được lúc 14h:")
+        print(f"\n✅ Báo cáo lọc được lúc 10h:")
         for sheet_name in sheet_names:
             try:
                 print(f"\n{'='*50}")
