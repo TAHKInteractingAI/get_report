@@ -6,3 +6,4 @@ selenium
 webdriver-manager
 ipython
 undetected-chromedriver
+dotenv
