@@ -29,3 +29,11 @@ jobs:
           TEAMS_EMAIL: ${{ secrets.TEAMS_EMAIL }}
           TEAMS_PASSWORD: ${{ secrets.TEAMS_PASSWORD }}
         run: python get_report.py
+      
+      - name: Upload Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkedin-screenshots
+          path: ./*.png
+          retention-days: 2

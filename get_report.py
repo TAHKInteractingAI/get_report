@@ -1,4 +1,5 @@
 import datetime
+from dotenv import load_dotenv
 import pytz
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -6,12 +7,13 @@ from dateutil import parser
 import re
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import gc
-gc.disable() # 03/23/2022 added this one to prevent trash collection and avoide crashing the notebooks
+# import gc
+# gc.disable() # 03/23/2022 added this one to prevent trash collection and avoide crashing the notebooks
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+import undetected_chromedriver as uc
 from IPython.display import Image, display
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -20,24 +22,26 @@ import time
 import json
 import os
 
+load_dotenv()
+
 email = os.environ.get('TEAMS_EMAIL')
 password = os.environ.get('TEAMS_PASSWORD')
 gcp_credentials_json = os.environ.get('GCP_SA_KEY')
 chat = "GetReport"
 local_tz = pytz.timezone("Asia/Ho_Chi_Minh")
-SPREADSHEET_ID = '1_m7s-1-I-SOFfzlWe7CBf5fstFir7qXYAKW4j-8hKYM'
+SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID')
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive'
 ]
 
-# Khởi tạo kết nối
+#Khởi tạo kết nối
 creds_dict = json.loads(gcp_credentials_json)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPES)
 client = gspread.authorize(creds)
 spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
-# Lấy danh sách tất cả sheet
+#Lấy danh sách tất cả sheet
 sheet_names = [s.title for s in spreadsheet.worksheets()]
 
 MESSAGE_PATTERN = re.compile(
@@ -73,65 +77,67 @@ def send_message(driver, message):
     except Exception as e:
         print(f"❌ Lỗi khi gửi tin nhắn: {e}")
 
-def login():
-    import tempfile
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    temp_dir = tempfile.mkdtemp()
-    options.add_argument(f"--user-data-dir={temp_dir}")
+# def login():
+#     import tempfile
+#     options = webdriver.ChromeOptions()
+#     options.add_argument("--headless")
+#     options.add_argument("--no-sandbox")
+#     options.add_argument("--disable-dev-shm-usage")
+#     options.add_argument("--disable-gpu")
+#     options.add_argument("--window-size=1920,1080")
+#     temp_dir = tempfile.mkdtemp()
+#     options.add_argument(f"--user-data-dir={temp_dir}")
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.get("https://teams.live.com/v2/")
-    time.sleep(5)
+#     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+#     driver.get("https://teams.live.com/v2/")
+#     time.sleep(5)
 
-    sign_in_btn = WebDriverWait(driver, 20).until(
-        EC.element_to_be_clickable((By.XPATH, '//button[@type="button" and contains(., "Sign in")]'))
-    )
-    sign_in_btn.click()
+#     sign_in_btn = WebDriverWait(driver, 20).until(
+#         EC.element_to_be_clickable((By.XPATH, '//button[@type="button" and contains(., "Sign in")]'))
+#     )
+#     sign_in_btn.click()
 
-    email_input = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "usernameEntry")))
-    email_input.send_keys(email)
-    email_input.send_keys(Keys.RETURN)
+#     email_input = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "usernameEntry")))
+#     email_input.send_keys(email)
+#     email_input.send_keys(Keys.RETURN)
 
-    # Chọn 'Use your password' nếu xuất hiện
-    try:
-        use_pass_btn = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '//span[@role="button" and contains(text(), "Use your password")]'))
-        )
-        use_pass_btn.click()
-    except Exception as e:
-        print("Không tìm thấy nút 'Use your password'.")
+#     # Chọn 'Use your password' nếu xuất hiện
+#     try:
+#         use_pass_btn = WebDriverWait(driver, 10).until(
+#             EC.element_to_be_clickable((By.XPATH, '//span[@role="button" and contains(text(), "Use your password")]'))
+#         )
+#         use_pass_btn.click()
+#     except Exception as e:
+#         print("Không tìm thấy nút 'Use your password'.")
 
-    # Tiếp tục nhập mật khẩu như cũ
-    password_input = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.ID, "passwordEntry")))
-    password_input.send_keys(password)
-    password_input.send_keys(Keys.RETURN)
+#     # Tiếp tục nhập mật khẩu như cũ
+#     password_input = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.ID, "passwordEntry")))
+#     password_input.send_keys(password)
+#     password_input.send_keys(Keys.RETURN)
 
-    # driver.save_screenshot("after_email.png")
-    # print("Đã chụp màn hình sau khi nhập email.")
+#     # driver.save_screenshot("after_email.png")
+#     # print("Đã chụp màn hình sau khi nhập email.")
 
-    try:
-        no_button = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="secondaryButton"]'))
-        )
-        no_button.click()
-    except Exception as e:
-        print("Không tìm thấy nút 'No'.")
+#     try:
+#         no_button = WebDriverWait(driver, 15).until(
+#             EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="secondaryButton"]'))
+#         )
+#         no_button.click()
+#     except Exception as e:
+#         print("Không tìm thấy nút 'No'.")
 
 
-    try:
-        button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="primaryButton"]'))
-        )
-        button.click()
-    except:
-        pass
+#     try:
+#         button = WebDriverWait(driver, 10).until(
+#             EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="primaryButton"]'))
+#         )
+#         button.click()
+#     except:
+#         pass
     
-    return driver
+#     return driver
+
+
 
 def open_chat(driver, chat_name):
     try:
@@ -286,12 +292,159 @@ def create_or_update_report_sheet(messages):
 
     except Exception as e:
         print(f"❌ Lỗi khi tạo hoặc cập nhật sheet 'Report': {e}")
+def get_driver():
+    options = uc.ChromeOptions()
+    
+    # 1. Cấu hình cơ bản cho môi trường Headless (GitHub Actions)
+    options.add_argument('--headless=new')
+    options.add_argument('--no-sandbox')
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument('--disable-gpu')
+    options.add_argument("--window-size=1920,1080")
+    
+    # 2. [TĂNG TỐC] Chiến lược load trang
+    # 'eager' giúp trình duyệt không chờ đợi tải xong ảnh hay script bên thứ 3
+    options.page_load_strategy = 'eager'
+    
+    # 3. [TĂNG TỐC] Chặn tải hình ảnh, CSS và Fonts để tiết kiệm băng thông và RAM
+    # prefs = {
+    #     "profile.managed_default_content_settings.images": 2,
+    #     "profile.managed_default_content_settings.stylesheets": 2,
+    #     "profile.managed_default_content_settings.fonts": 2
+    # }
+    # options.add_experimental_option("prefs", prefs)
+    
+    # 4. Ép trình duyệt dùng tiếng Anh
+    options.add_argument('--lang=en-GB')
+    
+    # 5. [CHỐNG PHÁT HIỆN] Thêm Proxy dân cư (Khuyến nghị)
+    # Trên GitHub Actions, hãy set secrets.PROXY_URL (ví dụ: http://user:pass@ip:port)
+    proxy_url = os.getenv("PROXY_URL")
+    if proxy_url:
+        options.add_argument(f'--proxy-server={proxy_url}')
+    
+    # Khởi tạo undetected_chromedriver (Không dùng webdriver.Chrome thông thường)
+    driver = uc.Chrome(options=options, version_main=146)
+    
+    # 6. [CHỐNG PHÁT HIỆN] Bơm thêm Stealth Script qua CDP
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+        "source": """
+            // Ẩn webdriver
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            
+            // Fake runtime của Chrome (Bot thường không có cái này)
+            window.navigator.chrome = { runtime: {} };
+            
+            // Bơm thêm plugins giả
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5]
+            });
+            
+            // Ép ngôn ngữ
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-GB', 'en-US', 'en']
+            });
+        """
+    })
+    
+    return driver
 
+    
+def login():
+    driver = get_driver()
+    # options = webdriver.ChromeOptions()
+    # #options.add_argument("--headless")  
+    # options.add_argument("--no-sandbox")
+    # options.add_argument("--disable-dev-shm-usage")
+    # options.add_argument("--window-size=1920,1080")
+    # # Giả lập User-Agent để tránh bị phát hiện là bot
+    # options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    
+    # temp_dir = tempfile.mkdtemp()
+    # options.add_argument(f"--user-data-dir={temp_dir}")
+
+    # driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    # Nếu tài khoản công ty, hãy đổi sang https://teams.microsoft.com/v2/
+    driver.get("https://teams.live.com/v2/")
+    wait = WebDriverWait(driver, 30)
+
+    try:
+        print("⏳ Đang tiến hành đăng nhập...")
+        # Bước 1: Click Sign in
+        sign_in_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(., "Sign in")]')))
+        sign_in_btn.click()
+        
+        # Bước 2: Nhập Email
+        email_input = wait.until(EC.presence_of_element_located((By.ID, "usernameEntry")))
+        email_input.send_keys(email)
+        email_input.send_keys(Keys.RETURN)
+        time.sleep(3)
+
+        # Bước 3: Xử lý nút 'Use your password' nếu xuất hiện
+        try:
+            use_pass_btn = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, '//span[contains(text(), "Use your password")]'))
+            )
+            use_pass_btn.click()
+        except:
+            pass
+
+        # Bước 4: Nhập Password
+        pass_input = wait.until(EC.presence_of_element_located((By.ID, "passwordEntry")))
+        pass_input.send_keys(password)
+        pass_input.send_keys(Keys.RETURN)
+        
+        # aria-describedby="signIn-title singIn-subtitle"
+        # /html/body/div[1]/div/div/div/div[5]/div/div[3]/div/div[1]/div/div/div[1]/div/button[1]
+        
+        # Bước 5: Vượt qua màn hình 'Stay signed in'
+        try:
+            no_btn = WebDriverWait(driver, 15).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="secondaryButton"]'))
+            )
+            no_btn.click()
+        except:
+            pass
+
+        print("✅ Đăng nhập thành công!")
+        # Đợi giao diện Teams tải xong hoàn toàn
+        time.sleep(12) 
+        try:
+            print("Phát hiện trang bắt Sign in tiếp theo")
+            driver.find_element(By.XPATH, '//button[contains(., "Sign in") or contains(@aria-describedby, "signIn-title singIn-subtitle")]').click()
+            print("Đã ấn nút Sign in")
+            time.sleep(10)
+            print("Bắt đầu ấn nút Retry")
+            actions = webdriver.ActionChains(driver)
+            actions.move_by_offset(500, 500).click().perform()  # Click vào vị trí gần giữa
+            actions.send_keys(Keys.TAB).perform()
+            time.sleep(1)
+            actions.send_keys(Keys.ENTER).perform()
+            print("Đã ấn nút Retry")
+            time.sleep(20)
+            driver.save_screenshot("after_login.png")
+        except Exception as e:
+            print(f"Không tìm thấy nút đặc thù: {e}")
+            driver.save_screenshot("error_login.png")
+            print(f"❌ Lỗi đăng nhập: {e}")
+            driver.quit()
+            return None
+        return driver
+    except Exception as e:
+        driver.save_screenshot("error_login.png")
+        print(f"❌ Lỗi đăng nhập: {e}")
+        driver.quit()
+        return None
+    
 if __name__ == "__main__":
     # Chạy thực tế
     driver = login()
+    time.sleep(5)
+    driver.save_screenshot("after_login.png")
+    if not driver:
+        print("❌ Đăng nhập không thành công!")
     open_chat(driver, chat)
-    
+
     current_hour = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).hour
 
     if current_hour == 14:
