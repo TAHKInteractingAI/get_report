@@ -29,7 +29,7 @@ password = os.environ.get('TEAMS_PASSWORD')
 gcp_credentials_json = os.environ.get('GCP_SA_KEY')
 chat = "GetReport"
 local_tz = pytz.timezone("Asia/Ho_Chi_Minh")
-SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID')
+SPREADSHEET_ID = "1_m7s-1-I-SOFfzlWe7CBf5fstFir7qXYAKW4j-8hKYM"
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive'
