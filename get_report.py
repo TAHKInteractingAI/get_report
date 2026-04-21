@@ -39,6 +39,7 @@ SCOPES = [
 creds_dict = json.loads(gcp_credentials_json)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPES)
 client = gspread.authorize(creds)
+print(f"Spreadsheet ID: {SPREADSHEET_ID}")
 spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
 #Lấy danh sách tất cả sheet
