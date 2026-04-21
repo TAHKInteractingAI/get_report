@@ -55,7 +55,7 @@ def display_screenshot(driver: webdriver.Chrome, file_name: str = 'screenshot.pn
     # driver.execute_script("window.scrollBy(0, 250);")
     driver.save_screenshot(file_name)
     time.sleep(3)
-    display(Image(filename=file_name))
+    #display(Image(filename=file_name))
 
 def send_message(driver, message):
     try:
@@ -71,9 +71,8 @@ def send_message(driver, message):
 
         # Gửi tin nhắn (ENTER)
         message_box.send_keys(Keys.ENTER)
-        #time.sleep(2)
-        display_screenshot(driver)
         time.sleep(2)  # Giữ lại chút delay sau khi gửi
+        display_screenshot(driver)
 
     except Exception as e:
         print(f"❌ Lỗi khi gửi tin nhắn: {e}")
