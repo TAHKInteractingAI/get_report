@@ -235,7 +235,7 @@ def get_filtered_messages(current_hour):
                         if start_time <= full_datetime < end_time:
                             messages[sheet_name].append(content)
 
-                    elif current_hour == 11:
+                    elif current_hour == 14:
                         # Lọc từ 1h sáng đến 13h hôm nay
                         start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
                         end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0))  # 13h hôm nay
@@ -447,11 +447,11 @@ if __name__ == "__main__":
 
     current_hour = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).hour
 
-    if current_hour == 11:
-        messages = get_filtered_messages(11)
+    if current_hour == 14:
+        messages = get_filtered_messages(14)
         combined_msgs = combine_messages(messages)  # Gộp message
 
-        print(f"\n✅ Báo cáo lọc được lúc 11h:")
+        print(f"\n✅ Báo cáo lọc được lúc 14h:")
         for sheet_name in sheet_names:
             try:
                 print(f"\n{'='*50}")
