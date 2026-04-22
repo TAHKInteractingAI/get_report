@@ -45,6 +45,7 @@ spreadsheet = client.open_by_key(SPREADSHEET_ID)
 #Lấy danh sách tất cả sheet
 sheet_names = [s.title for s in spreadsheet.worksheets()]
 
+#Message Pattern is anything
 MESSAGE_PATTERN = re.compile(
     r".*\+\s*([6-9])/.*",
     re.IGNORECASE | re.DOTALL
@@ -225,8 +226,8 @@ def get_filtered_messages(current_hour):
                     content = preprocess_message(content)
 
                     # Bỏ qua message không hợp lệ
-                    if not is_valid_message(content):
-                        continue
+                    # if not is_valid_message(content):
+                    #     continue
 
                     if current_hour == 8:
                         # Lọc từ 13h hôm qua đến 1h sáng hôm nay
@@ -457,7 +458,7 @@ if __name__ == "__main__":
                 print(f"\n{'='*50}")
                 print(f"[ {sheet_name} ]")
                 print(combined_msgs[sheet_name])
-                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+                message = f" Testing: [ {sheet_name} ]\n" + combined_msgs[sheet_name]
                 send_message(driver, message)
             except:
                 continue
@@ -473,7 +474,7 @@ if __name__ == "__main__":
                 print(f"\n{'='*50}")
                 print(f"[ {sheet_name} ]")
                 print(combined_msgs[sheet_name])
-                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+                message = f"Testing: [ {sheet_name} ]\n" + combined_msgs[sheet_name]
                 send_message(driver, message)
             except:
                 continue
