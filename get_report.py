@@ -492,6 +492,26 @@ if __name__ == "__main__":
                 continue
         create_or_update_report_sheet(messages)  # Lưu kết quả vào sheet mới
     
+    else:
+        messages = get_filtered_messages(current_hour)
+        combined_msgs = combine_messages(messages)  # Gộp message
+
+        print(f"\n✅ Báo cáo lọc được lúc 8h:")
+        for sheet_name in sheet_names:
+            try:
+                print(f"""\nTesting{'='*50}
+                      Sheet: [ {sheet_name} ]
+                      Message: [ {combined_msgs[sheet_name]} ]
+                      """)
+                # print(f"[ {sheet_name} ]")
+                # print(combined_msgs[sheet_name])
+                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+                display_screenshot(driver, f"after_sending_{sheet_name}.png")
+            except:
+                continue
+        create_or_update_report_sheet(messages)
+        
+    
     driver.quit()
     print("✅ Hoàn tất công việc!")
     
