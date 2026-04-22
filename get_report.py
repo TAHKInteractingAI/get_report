@@ -45,7 +45,6 @@ spreadsheet = client.open_by_key(SPREADSHEET_ID)
 #Lấy danh sách tất cả sheet
 sheet_names = [s.title for s in spreadsheet.worksheets()]
 
-#Message Pattern is anything
 MESSAGE_PATTERN = re.compile(
     r".*\+\s*([6-9])/.*",
     re.IGNORECASE | re.DOTALL
@@ -73,7 +72,7 @@ def send_message(driver, message):
         # Gửi tin nhắn (ENTER)
         message_box.send_keys(Keys.ENTER)
         time.sleep(2)  # Giữ lại chút delay sau khi gửi
-        display_screenshot(driver)
+        display_screenshot(driver, "after_sending_message.png")
 
     except Exception as e:
         print(f"❌ Lỗi khi gửi tin nhắn: {e}")
@@ -226,8 +225,8 @@ def get_filtered_messages(current_hour):
                     content = preprocess_message(content)
 
                     # Bỏ qua message không hợp lệ
-                    # if not is_valid_message(content):
-                    #     continue
+                    if not is_valid_message(content):
+                        continue
 
                     if current_hour == 8:
                         # Lọc từ 13h hôm qua đến 1h sáng hôm nay
@@ -241,6 +240,13 @@ def get_filtered_messages(current_hour):
                         start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
                         end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0))  # 13h hôm nay
                         if start_time <= full_datetime < end_time:
+                            messages[sheet_name].append(content)
+                    
+                    else:
+                        # Lấy tất cả tin nhắn trong vòng 24 tiếng qua ĐỂ TEST
+                        start_time = now - datetime.timedelta(hours=24)
+                        end_time = now
+                        if start_time <= full_datetime <= end_time:
                             messages[sheet_name].append(content)
 
                 except:
@@ -455,11 +461,14 @@ if __name__ == "__main__":
         print(f"\n✅ Báo cáo lọc được lúc 14h:")
         for sheet_name in sheet_names:
             try:
-                print(f"\n{'='*50}")
-                print(f"[ {sheet_name} ]")
-                print(combined_msgs[sheet_name])
-                message = f" Testing: [ {sheet_name} ]\n" + combined_msgs[sheet_name]
-                send_message(driver, message)
+                print(f"""\nTesting{'='*50}
+                      Sheet: [ {sheet_name} ]
+                      Message: [ {combined_msgs[sheet_name]} ]
+                      """)
+                # print(f"[ {sheet_name} ]")
+                # print(combined_msgs[sheet_name])
+                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+                display_screenshot(driver, f"after_sending_{sheet_name}.png")
             except:
                 continue
         create_or_update_report_sheet(messages)  # Lưu kết quả vào sheet mới
@@ -471,11 +480,14 @@ if __name__ == "__main__":
         print(f"\n✅ Báo cáo lọc được lúc 8h:")
         for sheet_name in sheet_names:
             try:
-                print(f"\n{'='*50}")
-                print(f"[ {sheet_name} ]")
-                print(combined_msgs[sheet_name])
-                message = f"Testing: [ {sheet_name} ]\n" + combined_msgs[sheet_name]
-                send_message(driver, message)
+                print(f"""\nTesting{'='*50}
+                      Sheet: [ {sheet_name} ]
+                      Message: [ {combined_msgs[sheet_name]} ]
+                      """)
+                # print(f"[ {sheet_name} ]")
+                # print(combined_msgs[sheet_name])
+                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+                display_screenshot(driver, f"after_sending_{sheet_name}.png")
             except:
                 continue
         create_or_update_report_sheet(messages)  # Lưu kết quả vào sheet mới
