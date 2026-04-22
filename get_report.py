@@ -243,13 +243,14 @@ def get_filtered_messages(current_hour):
                         end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0))  # 13h hôm nay
                         if start_time <= full_datetime < end_time:
                             messages[sheet_name].append(content)
-                    
                     else:
-                        # Lấy tất cả tin nhắn trong vòng 24 tiếng qua ĐỂ TEST
-                        start_time = now - datetime.timedelta(hours=24)
-                        end_time = now
-                        if start_time <= full_datetime <= end_time:
-                            messages[sheet_name].append(content)
+                        print(f"Current time là {current_hour}h, không khớp với điều kiện lọc. (8h hoặc 14h)")
+                    # else:
+                    #     # Lấy tất cả tin nhắn trong vòng 24 tiếng qua ĐỂ TEST
+                    #     start_time = now - datetime.timedelta(hours=24)
+                    #     end_time = now
+                    #     if start_time <= full_datetime <= end_time:
+                    #         messages[sheet_name].append(content)
 
                 except:
                     continue
@@ -472,7 +473,7 @@ if __name__ == "__main__":
             # print(f"[ {sheet_name} ]")
             # print(combined_msgs[sheet_name])
             message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
-            display_screenshot(driver, f"after_sending_{sheet_name}.png")
+            display_screenshot(driver, f"after_sending.png")
         except:
             continue
     create_or_update_report_sheet(messages)
