@@ -45,10 +45,11 @@ spreadsheet = client.open_by_key(SPREADSHEET_ID)
 #Lấy danh sách tất cả sheet
 sheet_names = [s.title for s in spreadsheet.worksheets()]
 
-MESSAGE_PATTERN = re.compile(
-    r".*\+\s*([6-9])/.*",
-    re.IGNORECASE | re.DOTALL
-)
+# MESSAGE_PATTERN = re.compile(
+#     r".*\+\s*([6-9])/.*",
+#     re.IGNORECASE | re.DOTALL
+# )
+MESSAGE_PATTERN = re.compile(r".*\+\s*(\d+)/.*", re.IGNORECASE | re.DOTALL)
 
 def display_screenshot(driver: webdriver.Chrome, file_name: str = 'screenshot.png'):
     """Chụp màn hình và hiển thị"""
@@ -199,8 +200,9 @@ def is_valid_message(content):
 # Hàm lọc theo thời gian
 def get_filtered_messages(current_hour):
     tz = pytz.timezone('Asia/Ho_Chi_Minh')
-    now = datetime.datetime.now(tz)
-
+    #now = datetime.datetime.now(tz)
+    now = datetime.datetime.now(tz).replace(tzinfo=None)
+    
     messages = {sheet_name: [] for sheet_name in sheet_names}  # Khởi tạo dictionary để lưu message theo sheet name
     EXCLUDED_SHEETS = ["iX000s iSSale TTS Base.XoắnNỆN50k*CấuTrúcVolunt", "iX000s iSSale gbBOSS AH*AU*cOL*YeuCauTop-iUp*KTra"]
 
@@ -261,7 +263,10 @@ def create_or_update_report_sheet(messages):
     try:
         # Lọc những sheet có message
         sheet_names_with_data = [sheet_name for sheet_name in sheet_names if messages[sheet_name]]
-
+        if not sheet_names_with_data:
+            print("⚠️ Không có tin nhắn nào thỏa mãn điều kiện lọc. Bỏ qua ghi báo cáo.")
+            return
+        
         # Kiểm tra xem sheet "Report" đã tồn tại chưa
         try:
             report_sheet = spreadsheet.worksheet("Report")  # Thử lấy sheet "Report"
