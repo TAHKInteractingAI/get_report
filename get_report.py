@@ -68,11 +68,12 @@ def send_message(driver, message):
         for line in message.split('\n'):
             message_box.send_keys(line)
             message_box.send_keys(Keys.SHIFT, Keys.ENTER)
-            display_screenshot(driver)
 
+        display_screenshot(driver, "after_typing_message.png")
+        time.sleep(3)
         # Gửi tin nhắn (ENTER)
         message_box.send_keys(Keys.ENTER)
-        time.sleep(2)  # Giữ lại chút delay sau khi gửi
+        time.sleep(3)  # Giữ lại chút delay sau khi gửi
         display_screenshot(driver, "after_sending_message.png")
 
     except Exception as e:
