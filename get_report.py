@@ -454,62 +454,23 @@ if __name__ == "__main__":
 
     current_hour = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).hour
 
-    if current_hour == 14:
-        messages = get_filtered_messages(14)
-        combined_msgs = combine_messages(messages)  # Gộp message
+    messages = get_filtered_messages(current_hour)
+    combined_msgs = combine_messages(messages)  # Gộp message
 
-        print(f"\n✅ Báo cáo lọc được lúc 14h:")
-        for sheet_name in sheet_names:
-            try:
-                print(f"""\nTesting{'='*50}
-                      Sheet: [ {sheet_name} ]
-                      Message: [ {combined_msgs[sheet_name]} ]
-                      """)
-                # print(f"[ {sheet_name} ]")
-                # print(combined_msgs[sheet_name])
-                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
-                display_screenshot(driver, f"after_sending_{sheet_name}.png")
-            except:
-                continue
-        create_or_update_report_sheet(messages)  # Lưu kết quả vào sheet mới
-
-    elif current_hour == 8:
-        messages = get_filtered_messages(8)
-        combined_msgs = combine_messages(messages)  # Gộp message
-
-        print(f"\n✅ Báo cáo lọc được lúc 8h:")
-        for sheet_name in sheet_names:
-            try:
-                print(f"""\nTesting{'='*50}
-                      Sheet: [ {sheet_name} ]
-                      Message: [ {combined_msgs[sheet_name]} ]
-                      """)
-                # print(f"[ {sheet_name} ]")
-                # print(combined_msgs[sheet_name])
-                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
-                display_screenshot(driver, f"after_sending_{sheet_name}.png")
-            except:
-                continue
-        create_or_update_report_sheet(messages)  # Lưu kết quả vào sheet mới
-    
-    else:
-        messages = get_filtered_messages(current_hour)
-        combined_msgs = combine_messages(messages)  # Gộp message
-
-        print(f"\n✅ Báo cáo lọc được lúc 8h:")
-        for sheet_name in sheet_names:
-            try:
-                print(f"""\nTesting{'='*50}
-                      Sheet: [ {sheet_name} ]
-                      Message: [ {combined_msgs[sheet_name]} ]
-                      """)
-                # print(f"[ {sheet_name} ]")
-                # print(combined_msgs[sheet_name])
-                message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
-                display_screenshot(driver, f"after_sending_{sheet_name}.png")
-            except:
-                continue
-        create_or_update_report_sheet(messages)
+    print(f"\n✅ Báo cáo lọc được lúc {current_hour}h:")
+    for sheet_name in sheet_names:
+        try:
+            print(f"""Testing
+                    Sheet: [ {sheet_name} ]
+                    Message: [ {combined_msgs[sheet_name]} ]
+                    """)
+            # print(f"[ {sheet_name} ]")
+            # print(combined_msgs[sheet_name])
+            message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+            display_screenshot(driver, f"after_sending_{sheet_name}.png")
+        except:
+            continue
+    create_or_update_report_sheet(messages)
         
     
     driver.quit()
