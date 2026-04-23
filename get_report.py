@@ -474,6 +474,7 @@ if __name__ == "__main__":
             # print(f"[ {sheet_name} ]")
             # print(combined_msgs[sheet_name])
             message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+            send_message(driver, message)
             display_screenshot(driver, f"after_sending.png")
         except:
             continue
