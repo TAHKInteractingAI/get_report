@@ -150,7 +150,7 @@ def open_chat(driver, chat_name):
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"]'))
         )
-        display_screenshot(driver)
+        display_screenshot(driver, 'after_opening_chat.png')
     except Exception as e:
         print(f"❌ Lỗi khi mở chat '{chat_name}': {e}")
 
@@ -452,7 +452,14 @@ def login():
     
 if __name__ == "__main__":
     # Chạy thực tế
-    driver = login()
+    for attempt_login in range(5):
+        driver = login()
+        if driver:
+            print("login thành công")
+            break
+        else:
+            print(f"⚠️ Thử đăng nhập lại lần {attempt_login + 1}/5...")
+            time.sleep(2)
     time.sleep(5)
     driver.save_screenshot("after_login.png")
     if not driver:
@@ -475,7 +482,6 @@ if __name__ == "__main__":
             # print(combined_msgs[sheet_name])
             message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
             send_message(driver, message)
-            display_screenshot(driver, f"after_sending.png")
         except:
             continue
     create_or_update_report_sheet(messages)
