@@ -231,7 +231,7 @@ def get_filtered_messages(current_hour):
                     if not is_valid_message(content):
                         continue
 
-                    if current_hour == 8:
+                    if current_hour == 9:
                         # Lọc từ 13h hôm qua đến 1h sáng hôm nay
                         start_time = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0))  # 13h hôm qua
                         end_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
