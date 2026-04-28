@@ -225,10 +225,9 @@ def is_valid_message(content):
 # Hàm lọc theo thời gian
 def get_filtered_messages(current_hour):
     tz = pytz.timezone('Asia/Ho_Chi_Minh')
-    #now = datetime.datetime.now(tz)
     now = datetime.datetime.now(tz).replace(tzinfo=None)
     
-    messages = {sheet_name: [] for sheet_name in sheet_names}  # Khởi tạo dictionary để lưu message theo sheet name
+    messages = {sheet_name: [] for sheet_name in sheet_names} 
     EXCLUDED_SHEETS = ["iX000s iSSale TTS Base.XoắnNỆN50k*CấuTrúcVolunt", "iX000s iSSale gbBOSS AH*AU*cOL*YeuCauTop-iUp*KTra"]
 
     for sheet_name in sheet_names:
@@ -240,46 +239,45 @@ def get_filtered_messages(current_hour):
 
             for row in data:
                 try:
-                    date_str = str(row['DATE'])  # Giả định định dạng YYYY-MM-DD
-                    time_str = str(row['TIME'])  # Giả định định dạng HH:MM hoặc HH:MM:SS
+                    date_str = str(row['DATE'])  
+                    time_str = str(row['TIME'])  
 
                     date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
                     time_obj = parser.parse(time_str).time()
-
                     full_datetime = datetime.datetime.combine(date_obj, time_obj)
 
-                    content = row['CONTENT'].strip()
-                    content = preprocess_message(content)
-
-                    # Bỏ qua message không hợp lệ
-                    if not is_valid_message(content):
+                    # Lấy text thô từ Sheet
+                    raw_content = row['CONTENT'].strip()
+                    
+                    # SỬA LỖI ẨN: Kiểm tra tin nhắn hợp lệ TRƯỚC KHI đem đi cắt gọt
+                    if not is_valid_message(raw_content):
                         continue
+                        
+                    # Nếu hợp lệ rồi thì mới đem đi cắt bỏ +6,7,8,9,10 và gọt duplicate
+                    content = preprocess_message(raw_content)
 
+                    # LỌC THEO THỜI GIAN VÀ CHỐNG DUPLICATE KHỐI
                     if current_hour == 8:
-                        # Lọc từ 13h hôm qua đến 1h sáng hôm nay
-                        start_time = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0)) 
-                        end_time = datetime.datetime.combine(now.date(), datetime.time(1, 0)) 
+                        start_time = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0))
+                        end_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))
                         if start_time <= full_datetime < end_time:
-                            # --- ĐIỂM MỚI 3: KIỂM TRA TRÙNG LẶP ---
                             if content not in messages[sheet_name]:
                                 messages[sheet_name].append(content)
 
                     elif current_hour == 14:
-                        # Lọc từ 1h sáng đến 13h hôm nay
-                        start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0)) 
-                        end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0)) 
+                        start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))
+                        end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0))
                         if start_time <= full_datetime < end_time:
-                            # --- ĐIỂM MỚI 3: KIỂM TRA TRÙNG LẶP ---
                             if content not in messages[sheet_name]:
                                 messages[sheet_name].append(content)
+                                
                     else:
-                        print(f"Current time là {current_hour}h, không khớp với điều kiện lọc. (8h hoặc 14h)")
-                    # else:
-                    #     # Lấy tất cả tin nhắn trong vòng 24 tiếng qua ĐỂ TEST
-                    #     start_time = now - datetime.timedelta(hours=24)
-                    #     end_time = now
-                    #     if start_time <= full_datetime <= end_time:
-                    #         messages[sheet_name].append(content)
+                        # MỞ KHÓA CHẾ ĐỘ TEST: Chạy giờ nào cũng lấy 24h qua
+                        start_time = now - datetime.timedelta(hours=24)
+                        end_time = now
+                        if start_time <= full_datetime <= end_time:
+                            if content not in messages[sheet_name]:
+                                messages[sheet_name].append(content)
 
                 except:
                     continue
