@@ -257,25 +257,27 @@ def get_filtered_messages(current_hour):
     return messages
 
 # Tạo sheet mới để lưu kết quả
-def create_or_update_report_sheet(messages):
+def write_to_sheet(sheet_target_name, messages):
     try:
+        # Lọc danh sách các sheet có dữ liệu
         sheet_names_with_data = [name for name in sheet_names if messages[name]]
         if not sheet_names_with_data:
-            print("⚠️ Không có tin nhắn nào thỏa mãn điều kiện lọc.")
             return
         
+        # Mở sheet mục tiêu, nếu chưa có thì tạo mới
         try:
-            report_sheet = spreadsheet.worksheet("Report")
+            ws = spreadsheet.worksheet(sheet_target_name)
         except gspread.exceptions.WorksheetNotFound:
-            report_sheet = spreadsheet.add_worksheet(title="Report", rows="1000", cols="20")
+            ws = spreadsheet.add_worksheet(title=sheet_target_name, rows="1000", cols="20")
+            print(f"--- Đã tạo mới sheet: {sheet_target_name} ---")
 
-        # Lấy toàn bộ dữ liệu hiện tại để so sánh tránh ghi đè/trùng lặp
-        existing_data = report_sheet.get_all_values()
+        # Lấy dữ liệu hiện tại để tránh ghi trùng
+        existing_data = ws.get_all_values()
         
-        # Cập nhật Header nếu cần
+        # Cập nhật tiêu đề cột (Header)
         header = sheet_names_with_data
         if not existing_data or existing_data[0] != header:
-            report_sheet.update('A1', [header])
+            ws.update('A1', [header])
             existing_data = [header]
 
         max_len = max(len(messages[s]) for s in sheet_names_with_data)
@@ -287,15 +289,16 @@ def create_or_update_report_sheet(messages):
                 msg = messages[sheet_name][i] if i < len(messages[sheet_name]) else ""
                 row.append(msg)
             
-            # CHỈ GHI NẾU DÒNG NÀY CHƯA TỒN TẠI TRONG SHEET REPORT
+            # Kiểm tra xem dòng này đã có trong sheet chưa trước khi ghi thêm
             if row not in existing_data:
-                report_sheet.append_row(row, value_input_option="USER_ENTERED")
+                ws.append_row(row, value_input_option="USER_ENTERED")
                 existing_data.append(row)
                 added_count += 1
         
-        print(f"✅ Đã ghi thêm {added_count} báo cáo mới vào sheet Report.")
+        print(f"✅ Hoàn tất ghi vào sheet [{sheet_target_name}]: Thêm {added_count} dòng mới.")
     except Exception as e:
-        print(f"❌ Lỗi cập nhật sheet Report: {e}")
+        print(f"❌ Lỗi khi ghi vào sheet {sheet_target_name}: {e}")
+        
         
 def get_driver():
     options = uc.ChromeOptions()
@@ -469,15 +472,18 @@ if __name__ == "__main__":
                     Sheet: [ {sheet_name} ]
                     Message: [ {combined_msgs[sheet_name]} ]
                     """)
-            # print(f"[ {sheet_name} ]")
-            # print(combined_msgs[sheet_name])
             message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
             send_message(driver, message)
         except:
             continue
-    create_or_update_report_sheet(messages)
+            
+    # ĐÃ XÓA HÀM CŨ Ở ĐÂY ĐỂ TRÁNH LỖI
+
+    # 1. Ghi dữ liệu sạch vào tab Report
+    write_to_sheet("Report", messages)
+    
+    # 2. Ghi dữ liệu sạch vào tab GetReport
+    write_to_sheet("GetReport", messages)
         
-    
     driver.quit()
-    print("✅ Hoàn tất công việc!")
-    
+    print("✅ Hoàn tất toàn bộ công việc!")
