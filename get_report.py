@@ -167,14 +167,15 @@ def preprocess_message(content):
     # Bước 1: Chuẩn hóa các pattern đặc biệt
     content = re.sub(r"-\s+-", "-", content)
     content = re.sub(r"\s*[+]+\s*(\d+/)\s*", r"\n+ \1 ", content)
+    # Gom các dòng bị rớt chữ của một gạch đầu dòng lên cùng 1 hàng
     content = re.sub(
-        r"(\+\s*\d+/.*?)\n(?![+\d]|Link|http)",  # Tìm xuống dòng KHÔNG bắt đầu bằng +, số, •, hoặc link
-        r"\1 ",  # Thay thế xuống dòng bằng khoảng trắng
-        content,
+        r"(\+\s*\d+/.*?)\n(?![+\d]|Link|http)", 
+        r"\1 ", 
+        content, 
         flags=re.DOTALL
     )
 
-    # Bước 2: Xử lý xuống dòng và thêm ZWSP
+    # Bước 2: Xử lý xuống dòng, lọc bỏ các dòng 6-10 và thêm ZWSP
     lines = content.splitlines()
     processed_lines = []
 
@@ -183,15 +184,38 @@ def preprocess_message(content):
         if not line:
             continue
 
+        # --- ĐIỂM MỚI 1: XÓA CÁC DÒNG + 6 ĐẾN + 10 ---
+        # Nếu dòng bắt đầu bằng + 6/, + 7/, + 8/, + 9/, + 10/ thì bỏ qua không lấy
+        if re.match(r"^\+\s*(6|7|8|9|10)\s*/", line):
+            continue
+        # ---------------------------------------------
+
         # Thêm ZWSP nếu dòng bắt đầu bằng +, =>, hoặc số
         if re.match(r"^(\+|\d+\.|=>|-)", line):
-            line = "\u200B" + line  # Chèn Zero Width Space ở đầu dòng
+            line = "\u200B" + line
 
         processed_lines.append(line)
 
+    # --- ĐIỂM MỚI 2: THUẬT TOÁN XÓA TRÙNG LẶP KHỐI ---
+    # Khử lỗi Bot SAM gửi 1 tin nhắn nhưng nội dung bị lặp lại nhiều lần
+    changed = True
+    while changed:
+        changed = False
+        n = len(processed_lines)
+        for L in range(n // 2, 0, -1):
+            for i in range(n - 2 * L + 1):
+                # Phát hiện 2 đoạn code giống hệt nhau liền kề
+                if processed_lines[i:i+L] == processed_lines[i+L:i+2*L]:
+                    processed_lines = processed_lines[:i+L] + processed_lines[i+2*L:]
+                    changed = True
+                    break
+            if changed:
+                break
+    # -------------------------------------------------
+
     # Bước 3: Gộp lại và chuẩn hóa
     content = "\n".join(processed_lines)
-    content = re.sub(r"\n{3,}", "\n\n", content)  # Giảm nhiều xuống dòng
+    content = re.sub(r"\n{3,}", "\n\n", content) 
     return content
 
 def is_valid_message(content):
@@ -233,17 +257,21 @@ def get_filtered_messages(current_hour):
 
                     if current_hour == 8:
                         # Lọc từ 13h hôm qua đến 1h sáng hôm nay
-                        start_time = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0))  # 13h hôm qua
-                        end_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
+                        start_time = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0)) 
+                        end_time = datetime.datetime.combine(now.date(), datetime.time(1, 0)) 
                         if start_time <= full_datetime < end_time:
-                            messages[sheet_name].append(content)
+                            # --- ĐIỂM MỚI 3: KIỂM TRA TRÙNG LẶP ---
+                            if content not in messages[sheet_name]:
+                                messages[sheet_name].append(content)
 
                     elif current_hour == 14:
                         # Lọc từ 1h sáng đến 13h hôm nay
-                        start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))  # 1h sáng hôm nay
-                        end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0))  # 13h hôm nay
+                        start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0)) 
+                        end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0)) 
                         if start_time <= full_datetime < end_time:
-                            messages[sheet_name].append(content)
+                            # --- ĐIỂM MỚI 3: KIỂM TRA TRÙNG LẶP ---
+                            if content not in messages[sheet_name]:
+                                messages[sheet_name].append(content)
                     else:
                         print(f"Current time là {current_hour}h, không khớp với điều kiện lọc. (8h hoặc 14h)")
                     # else:
