@@ -164,60 +164,43 @@ def combine_messages(messages_dict):
     return combined
 
 def preprocess_message(content):
-    # Bước 1: Chuẩn hóa các pattern đặc biệt
+    # Bước 1: Chuẩn hóa gạch đầu dòng và khoảng trắng
     content = re.sub(r"-\s+-", "-", content)
     content = re.sub(r"\s*[+]+\s*(\d+/)\s*", r"\n+ \1 ", content)
-    # Gom các dòng bị rớt chữ của một gạch đầu dòng lên cùng 1 hàng
-    content = re.sub(
-        r"(\+\s*\d+/.*?)\n(?![+\d]|Link|http)", 
-        r"\1 ", 
-        content, 
-        flags=re.DOTALL
-    )
 
-    # Bước 2: Xử lý xuống dòng, lọc bỏ các dòng 6-10 và thêm ZWSP
+    # Bước 2: Tách dòng và lọc bỏ + 6/ đến + 10/
     lines = content.splitlines()
     processed_lines = []
 
     for line in lines:
         line = line.strip()
-        if not line:
-            continue
+        if not line: continue
 
-        # --- ĐIỂM MỚI 1: XÓA CÁC DÒNG + 6 ĐẾN + 10 ---
-        # Nếu dòng bắt đầu bằng + 6/, + 7/, + 8/, + 9/, + 10/ thì bỏ qua không lấy
+        # XÓA DÒNG + 6 ĐẾN + 10
         if re.match(r"^\+\s*(6|7|8|9|10)\s*/", line):
             continue
-        # ---------------------------------------------
 
-        # Thêm ZWSP nếu dòng bắt đầu bằng +, =>, hoặc số
+        # Thêm ký tự ẩn ZWSP để tránh Teams auto-format sai
         if re.match(r"^(\+|\d+\.|=>|-)", line):
             line = "\u200B" + line
-
         processed_lines.append(line)
 
-    # --- ĐIỂM MỚI 2: THUẬT TOÁN XÓA TRÙNG LẶP KHỐI ---
-    # Khử lỗi Bot SAM gửi 1 tin nhắn nhưng nội dung bị lặp lại nhiều lần
+    # Bước 3: THUẬT TOÁN KHỬ TRÙNG LẶP KHỐI (Duplicate trong 1 tin nhắn)
     changed = True
     while changed:
         changed = False
         n = len(processed_lines)
         for L in range(n // 2, 0, -1):
             for i in range(n - 2 * L + 1):
-                # Phát hiện 2 đoạn code giống hệt nhau liền kề
                 if processed_lines[i:i+L] == processed_lines[i+L:i+2*L]:
                     processed_lines = processed_lines[:i+L] + processed_lines[i+2*L:]
                     changed = True
                     break
-            if changed:
-                break
-    # -------------------------------------------------
+            if changed: break
 
-    # Bước 3: Gộp lại và chuẩn hóa
     content = "\n".join(processed_lines)
-    content = re.sub(r"\n{3,}", "\n\n", content) 
-    return content
-
+    return content.strip()
+    
 def is_valid_message(content):
     """Kiểm tra message có đúng định dạng"""
     return bool(MESSAGE_PATTERN.match(content))
@@ -227,111 +210,93 @@ def get_filtered_messages(current_hour):
     tz = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz).replace(tzinfo=None)
     
-    messages = {sheet_name: [] for sheet_name in sheet_names} 
-    EXCLUDED_SHEETS = ["iX000s iSSale TTS Base.XoắnNỆN50k*CấuTrúcVolunt", "iX000s iSSale gbBOSS AH*AU*cOL*YeuCauTop-iUp*KTra"]
+    messages = {sheet_name: [] for sheet_name in sheet_names}
+    # THÊM "Report" VÀ "GetReport" VÀO DANH SÁCH LOẠI TRỪ ĐỂ TRÁNH ĐỌC LẶP
+    EXCLUDED_SHEETS = ["Report", "GetReport", "iX000s iSSale TTS Base.XoắnNỆN50k*CấuTrúcVolunt", "iX000s iSSale gbBOSS AH*AU*cOL*YeuCauTop-iUp*KTra"]
 
     for sheet_name in sheet_names:
+        if sheet_name in EXCLUDED_SHEETS: continue
         try:
-            if sheet_name in EXCLUDED_SHEETS:
-                continue
             sheet = spreadsheet.worksheet(sheet_name)
             data = sheet.get_all_records()
 
             for row in data:
                 try:
-                    date_str = str(row['DATE'])  
-                    time_str = str(row['TIME'])  
-
-                    date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
-                    time_obj = parser.parse(time_str).time()
-                    full_datetime = datetime.datetime.combine(date_obj, time_obj)
-
-                    # Lấy text thô từ Sheet
+                    full_datetime = datetime.datetime.combine(
+                        datetime.datetime.strptime(str(row['DATE']), '%Y-%m-%d').date(),
+                        parser.parse(str(row['TIME'])).time()
+                    )
                     raw_content = row['CONTENT'].strip()
+
+                    # KIỂM TRA HỢP LỆ TRÊN NỘI DUNG GỐC (Trước khi cắt gọt)
+                    if not is_valid_message(raw_content): continue
                     
-                    # SỬA LỖI ẨN: Kiểm tra tin nhắn hợp lệ TRƯỚC KHI đem đi cắt gọt
-                    if not is_valid_message(raw_content):
-                        continue
-                        
-                    # Nếu hợp lệ rồi thì mới đem đi cắt bỏ +6,7,8,9,10 và gọt duplicate
+                    # SAU ĐÓ MỚI CẮT GỌT
                     content = preprocess_message(raw_content)
+                    if not content: continue # Nếu sau khi cắt mà không còn gì thì bỏ qua
 
-                    # LỌC THEO THỜI GIAN VÀ CHỐNG DUPLICATE KHỐI
+                    # PHÂN LOẠI GIỜ VÀ LOẠI BỎ TIN NHẮN TRÙNG
+                    is_in_time = False
                     if current_hour == 8:
-                        start_time = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0))
-                        end_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))
-                        if start_time <= full_datetime < end_time:
-                            if content not in messages[sheet_name]:
-                                messages[sheet_name].append(content)
-
+                        start = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0))
+                        end = datetime.datetime.combine(now.date(), datetime.time(1, 0))
+                        is_in_time = start <= full_datetime < end
                     elif current_hour == 14:
-                        start_time = datetime.datetime.combine(now.date(), datetime.time(1, 0))
-                        end_time = datetime.datetime.combine(now.date(), datetime.time(13, 0))
-                        if start_time <= full_datetime < end_time:
-                            if content not in messages[sheet_name]:
-                                messages[sheet_name].append(content)
-                                
-                    else:
-                        # MỞ KHÓA CHẾ ĐỘ TEST: Chạy giờ nào cũng lấy 24h qua
-                        start_time = now - datetime.timedelta(hours=24)
-                        end_time = now
-                        if start_time <= full_datetime <= end_time:
-                            if content not in messages[sheet_name]:
-                                messages[sheet_name].append(content)
+                        start = datetime.datetime.combine(now.date(), datetime.time(1, 0))
+                        end = datetime.datetime.combine(now.date(), datetime.time(13, 0))
+                        is_in_time = start <= full_datetime < end
+                    else: 
+                        # Chế độ TEST: lấy 24h qua nếu chạy ngoài giờ 8h và 14h
+                        is_in_time = (now - datetime.timedelta(hours=24)) <= full_datetime <= now
 
-                except:
-                    continue
+                    if is_in_time and content not in messages[sheet_name]:
+                        messages[sheet_name].append(content)
+                except: continue
         except Exception as e:
-            print(f"❌ Lỗi truy cập sheet '{sheet_name}': {e}")
-
+            print(f"❌ Lỗi sheet '{sheet_name}': {e}")
     return messages
 
 # Tạo sheet mới để lưu kết quả
 def create_or_update_report_sheet(messages):
     try:
-        # Lọc những sheet có message
-        sheet_names_with_data = [sheet_name for sheet_name in sheet_names if messages[sheet_name]]
+        sheet_names_with_data = [name for name in sheet_names if messages[name]]
         if not sheet_names_with_data:
-            print("⚠️ Không có tin nhắn nào thỏa mãn điều kiện lọc. Bỏ qua ghi báo cáo.")
+            print("⚠️ Không có tin nhắn nào thỏa mãn điều kiện lọc.")
             return
         
-        # Kiểm tra xem sheet "Report" đã tồn tại chưa
         try:
-            report_sheet = spreadsheet.worksheet("Report")  # Thử lấy sheet "Report"
-            print("✅ Sheet 'Report' đã tồn tại. Đang ghi dữ liệu vào sheet.")
+            report_sheet = spreadsheet.worksheet("Report")
         except gspread.exceptions.WorksheetNotFound:
-            report_sheet = spreadsheet.add_worksheet(title="Report", rows="100", cols=len(sheet_names_with_data))
-            print("✅ Tạo mới sheet 'Report'.")
+            report_sheet = spreadsheet.add_worksheet(title="Report", rows="1000", cols="20")
 
-        # Kiểm tra xem đã có tiêu đề cột chưa
-        existing_header = report_sheet.row_values(1)  # Lấy dòng đầu tiên của sheet
-        if existing_header != sheet_names_with_data:
-            # Tạo header mới theo đúng thứ tự và đầy đủ
-            new_header = []
-            for col in sheet_names_with_data:
-                if col not in existing_header:
-                    new_header.append(col)
+        # Lấy toàn bộ dữ liệu hiện tại để so sánh tránh ghi đè/trùng lặp
+        existing_data = report_sheet.get_all_values()
+        
+        # Cập nhật Header nếu cần
+        header = sheet_names_with_data
+        if not existing_data or existing_data[0] != header:
+            report_sheet.update('A1', [header])
+            existing_data = [header]
 
-            # Cập nhật header
-            if new_header:
-                updated_header = existing_header + new_header
-                report_sheet.update('A1', [updated_header])
-                print(f"✅ Đã thêm các cột mới: {', '.join(new_header)}")
+        max_len = max(len(messages[s]) for s in sheet_names_with_data)
+        added_count = 0
 
-        # Thêm dữ liệu vào sheet
-        max_length = max(len(messages[sheet]) for sheet in sheet_names_with_data)  # Tìm chiều dài dài nhất của các message list
-
-        for i in range(max_length):
+        for i in range(max_len):
             row = []
             for sheet_name in sheet_names_with_data:
-                if i < len(messages[sheet_name]):
-                    row.append(messages[sheet_name][i])
-                else:
-                    row.append("")  # Nếu không có message, để trống
-            report_sheet.append_row(row)  # Thêm dòng vào sheet
-
+                msg = messages[sheet_name][i] if i < len(messages[sheet_name]) else ""
+                row.append(msg)
+            
+            # CHỈ GHI NẾU DÒNG NÀY CHƯA TỒN TẠI TRONG SHEET REPORT
+            if row not in existing_data:
+                report_sheet.append_row(row, value_input_option="USER_ENTERED")
+                existing_data.append(row)
+                added_count += 1
+        
+        print(f"✅ Đã ghi thêm {added_count} báo cáo mới vào sheet Report.")
     except Exception as e:
-        print(f"❌ Lỗi khi tạo hoặc cập nhật sheet 'Report': {e}")
+        print(f"❌ Lỗi cập nhật sheet Report: {e}")
+        
 def get_driver():
     options = uc.ChromeOptions()
     
