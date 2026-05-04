@@ -416,31 +416,37 @@ def login():
 
         print("✅ Đăng nhập thành công!")
         # Đợi giao diện Teams tải xong hoàn toàn
-        time.sleep(12) 
+        time.sleep(15) 
+        
+        # SỬA LẠI ĐOẠN NÀY: Kiểm tra nút an toàn, không thấy thì bỏ qua chứ không quit
         try:
-            print("Phát hiện trang bắt Sign in tiếp theo")
-            driver.find_element(By.XPATH, '//button[contains(., "Sign in") or contains(@aria-describedby, "signIn-title singIn-subtitle")]').click()
-            print("Đã ấn nút Sign in")
-            time.sleep(10)
-            print("Bắt đầu ấn nút Retry")
-            actions = webdriver.ActionChains(driver)
-            actions.move_by_offset(500, 500).click().perform()  # Click vào vị trí gần giữa
-            actions.send_keys(Keys.TAB).perform()
-            time.sleep(1)
-            actions.send_keys(Keys.ENTER).perform()
-            print("Đã ấn nút Retry")
-            time.sleep(20)
-            driver.save_screenshot("after_login.png")
+            extra_signin = driver.find_elements(By.XPATH, '//button[contains(., "Sign in") or contains(@aria-describedby, "signIn-title singIn-subtitle")]')
+            if len(extra_signin) > 0:
+                print("Phát hiện trang bắt Sign in tiếp theo...")
+                extra_signin[0].click()
+                print("Đã ấn nút Sign in")
+                time.sleep(10)
+                
+                print("Bắt đầu ấn nút Retry")
+                actions = webdriver.ActionChains(driver)
+                actions.move_by_offset(500, 500).click().perform()  # Click vào vị trí gần giữa
+                actions.send_keys(Keys.TAB).perform()
+                time.sleep(1)
+                actions.send_keys(Keys.ENTER).perform()
+                print("Đã ấn nút Retry")
+                time.sleep(20)
+            else:
+                print("👉 Giao diện Teams đã load thẳng, không có popup chặn, tiếp tục công việc!")
+                
         except Exception as e:
-            print(f"Không tìm thấy nút đặc thù: {e}")
-            driver.save_screenshot("error_login.png")
-            print(f"❌ Lỗi đăng nhập: {e}")
-            driver.quit()
-            return None
-        return driver
+            print(f"⚠️ Bỏ qua lỗi check màn hình phụ: {e}")
+            
+        driver.save_screenshot("after_login_success.png")
+        return driver  # LUÔN TRẢ VỀ DRIVER VÌ ĐÃ VÀO ĐƯỢC TEAMS
+
     except Exception as e:
         driver.save_screenshot("error_login.png")
-        print(f"❌ Lỗi đăng nhập: {e}")
+        print(f"❌ Lỗi đăng nhập chính: {e}")
         driver.quit()
         return None
     
