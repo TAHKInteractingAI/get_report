@@ -49,7 +49,7 @@ sheet_names = [s.title for s in spreadsheet.worksheets()[:-1]]
 #     r".*\+\s*([6-9])/.*",
 #     re.IGNORECASE | re.DOTALL
 # )
-MESSAGE_PATTERN = re.compile(r".*\+\s*(\d+)/.*", re.IGNORECASE | re.DOTALL)
+MESSAGE_PATTERN = re.compile(r".*(\+\s*\d+/|^\s*\d+\.).*", re.IGNORECASE | re.DOTALL | re.MULTILINE)
 
 def display_screenshot(driver: webdriver.Chrome, file_name: str = 'screenshot.png'):
     """Chụp màn hình và hiển thị"""
