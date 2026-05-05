@@ -141,19 +141,45 @@ def send_message(driver, message):
 
 
 
-def open_chat(driver, chat_name):
+def open_chat_by_search(driver, chat_name):
+    wait = WebDriverWait(driver, 20)
     try:
-        chat_element = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, f"//span[contains(text(), '{chat_name}')]"))
-        )
-        chat_element.click()
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"]'))
-        )
-        display_screenshot(driver, 'after_opening_chat.png')
-    except Exception as e:
-        print(f"❌ Lỗi khi mở chat '{chat_name}': {e}")
+        # Lấy ô tìm kiếm
+        search_xpath = '//input[@placeholder="Search"] | //input[@aria-label="Search"] | //input[@id="ms-searchux-input"]'
+        search = wait.until(EC.presence_of_element_located((By.XPATH, search_xpath)))
 
+        # Gõ tên chat
+        search.click()
+        search.send_keys(Keys.CONTROL + "a")
+        search.send_keys(Keys.BACKSPACE)
+        search.send_keys(chat_name)
+        
+        # Chờ kết quả search xổ ra và bấm chọn
+        time.sleep(4)
+        ActionChains(driver).send_keys(Keys.ARROW_DOWN).pause(1).send_keys(Keys.ENTER).perform()
+        
+        print(f"Đang chờ load nhóm: {chat_name}...")
+        
+        # ==========================================
+        # 🛡️ CHỐT CHẶN AN TOÀN: Kiểm tra Chat Header
+        # ==========================================
+        # Đợi tối đa 10s để tiêu đề nhóm chat thay đổi đúng với tên mình cần
+        # Selector này lấy tên nhóm ở thanh trên cùng của Teams
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, f"//span[@data-tid='chat-header-title' and contains(text(), '{chat_name[:10]}')] | //hdiv[contains(@class, 'chat-header')]//span[contains(text(), '{chat_name[:10]}')]"))
+            )
+            print(f"✅ Đã vào đúng nhóm: {chat_name}")
+            time.sleep(2) # Chờ tin nhắn load nốt
+            return True
+            
+        except Exception as e:
+            print(f"⚠️ Teams load chậm hoặc không tìm thấy nhóm {chat_name}, bỏ qua để tránh cào nhầm data!")
+            return False
+
+    except Exception as e:
+        print(f"❌ Lỗi khi tìm kiếm nhóm: {chat_name} - {e}")
+        return False
 def combine_messages(messages_dict):
     """Gộp các message trong cùng sheet thành một chuỗi"""
     combined = {}
