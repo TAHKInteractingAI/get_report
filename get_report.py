@@ -141,7 +141,7 @@ def send_message(driver, message):
 
 
 
-def open_chat_by_search(driver, chat_name):
+def open_chat(driver, chat_name):
     wait = WebDriverWait(driver, 20)
     try:
         # Lấy ô tìm kiếm
