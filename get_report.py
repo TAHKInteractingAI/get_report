@@ -165,21 +165,17 @@ def open_chat(driver, chat_name):
         # ==========================================
         # Đợi tối đa 10s để tiêu đề nhóm chat thay đổi đúng với tên mình cần
         # Selector này lấy tên nhóm ở thanh trên cùng của Teams
-        try:
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, f"//span[@data-tid='chat-header-title' and contains(text(), '{chat_name[:10]}')] | //hdiv[contains(@class, 'chat-header')]//span[contains(text(), '{chat_name[:10]}')]"))
-            )
-            print(f"✅ Đã vào đúng nhóm: {chat_name}")
-            time.sleep(2) # Chờ tin nhắn load nốt
-            return True
-            
-        except Exception as e:
-            print(f"⚠️ Teams load chậm hoặc không tìm thấy nhóm {chat_name}, bỏ qua để tránh cào nhầm data!")
-            return False
-
+           # CHỐT CHẶN: Ép bot phải nhìn thấy tên nhóm chat ở Header thì mới báo thành công
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, f"//span[@data-tid='chat-header-title' and contains(text(), '{chat_name[:10]}')] | //hdiv[contains(@class, 'chat-header')]//span[contains(text(), '{chat_name[:10]}')]"))
+        )
+        print(f"✅ Đã vào đúng nhóm: {chat_name}")
+        time.sleep(2)
+        return True # <-- QUAN TRỌNG: Trả về True nếu thành công
     except Exception as e:
-        print(f"❌ Lỗi khi tìm kiếm nhóm: {chat_name} - {e}")
-        return False
+        print(f"❌ Lỗi khi mở chat '{chat_name}': {e}")
+        return False # <-- QUAN TRỌNG: Trả về False nếu thất bại
+        
 def combine_messages(messages_dict):
     """Gộp các message trong cùng sheet thành một chuỗi"""
     combined = {}
@@ -490,32 +486,36 @@ if __name__ == "__main__":
     driver.save_screenshot("after_login.png")
     if not driver:
         print("❌ Đăng nhập không thành công!")
-    open_chat(driver, chat)
+    else:
+        # LƯU Ý Ở ĐÂY: Gán kết quả của việc mở chat vào biến kiểm tra
+        is_chat_opened = open_chat(driver, chat)  # chat đang là "GetReport"
 
-    current_hour = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).hour
+        # CHỈ KHI NÀO MỞ CHAT THÀNH CÔNG MỚI CHO GỬI TIN NHẮN
+        if is_chat_opened:
+            current_hour = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).hour
 
-    messages = get_filtered_messages(current_hour)
-    combined_msgs = combine_messages(messages)  # Gộp message
+            messages = get_filtered_messages(current_hour)
+            combined_msgs = combine_messages(messages)
 
-    print(f"\n✅ Báo cáo lọc được lúc {current_hour}h:")
-    for sheet_name in sheet_names:
-        try:
-            print(f"""Testing
-                    Sheet: [ {sheet_name} ]
-                    Message: [ {combined_msgs[sheet_name]} ]
-                    """)
-            message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
-            send_message(driver, message)
-        except:
-            continue
-            
-    # ĐÃ XÓA HÀM CŨ Ở ĐÂY ĐỂ TRÁNH LỖI
+            print(f"\n✅ Báo cáo lọc được lúc {current_hour}h:")
+            for sheet_name in sheet_names:
+                try:
+                    # Bỏ qua nếu không có tin nhắn
+                    if not combined_msgs.get(sheet_name):
+                        continue
+                        
+                    print(f"Sending Sheet: [ {sheet_name} ]")
+                    message = f"[ {sheet_name} ]\n" + combined_msgs[sheet_name]
+                    send_message(driver, message)
+                except Exception as e:
+                    print(f"Lỗi gửi tin của sheet {sheet_name}: {e}")
+                    continue
 
-    # 1. Ghi dữ liệu sạch vào tab Report
-    write_to_sheet("Report", messages)
-    
-    # 2. Ghi dữ liệu sạch vào tab GetReport
-    write_to_sheet("GetReport", messages)
-        
-    driver.quit()
-    print("✅ Hoàn tất toàn bộ công việc!")
+            # Ghi dữ liệu sạch
+            write_to_sheet("Report", messages)
+            write_to_sheet("GetReport", messages)
+        else:
+            print(f"⚠️ HỦY GỬI TIN NHẮN: Bot không thể chuyển sang nhóm {chat}. Vui lòng check lại kết nối hoặc giao diện Teams!")
+
+        driver.quit()
+        print("✅ Hoàn tất toàn bộ công việc!")
