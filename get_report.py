@@ -207,97 +207,87 @@ def is_valid_message(content):
 
 # Hàm lọc theo thời gian
 def get_filtered_messages(current_hour):
-    tz = pytz.timezone('Asia/Ho_Chi_Minh')
-    now = datetime.datetime.now(tz).replace(tzinfo=None)
-    
-    messages = {sheet_name: [] for sheet_name in sheet_names}
-    # THÊM "Report" VÀ "GetReport" VÀO DANH SÁCH LOẠI TRỪ ĐỂ TRÁNH ĐỌC LẶP
-    EXCLUDED_SHEETS = ["Report", "GetReport", "iX000s iSSale TTS Base.XoắnNỆN50k*CấuTrúcVolunt", "iX000s iSSale gbBOSS AH*AU*cOL*YeuCauTop-iUp*KTra"]
+    tz = pytz.timezone('Asia/Ho_Chi_Minh')
+    now = datetime.datetime.now(tz).replace(tzinfo=None)
+    
+    messages = {sheet_name: [] for sheet_name in sheet_names}
+    EXCLUDED_SHEETS = ["Report", "GetReport", "iX000s iSSale TTS Base.XoắnNỆN50k*CấuTrúcVolunt", "iX000s iSSale gbBOSS AH*AU*cOL*YeuCauTop-iUp*KTra"]
 
-    for sheet_name in sheet_names:
-        if sheet_name in EXCLUDED_SHEETS: continue
-        try:
-            sheet = spreadsheet.worksheet(sheet_name)
-            data = sheet.get_all_records()
+    for sheet_name in sheet_names:
+        if sheet_name in EXCLUDED_SHEETS: continue
+        try:
+            sheet = spreadsheet.worksheet(sheet_name)
+            data = sheet.get_all_records()
 
-            for row in data:
-                try:
-                    full_datetime = datetime.datetime.combine(
-                        datetime.datetime.strptime(str(row['DATE']), '%Y-%m-%d').date(),
-                        parser.parse(str(row['TIME'])).time()
-                    )
-                    raw_content = row['CONTENT'].strip()
+            for row in data:
+                try:
+                    # SỬA TẠI ĐÂY: Dùng parser cho cả ngày và giờ để linh hoạt nhất
+                    date_part = parser.parse(str(row['DATE'])).date()
+                    time_part = parser.parse(str(row['TIME'])).time()
+                    full_datetime = datetime.datetime.combine(date_part, time_part)
+                    
+                    # Đảm bảo Content luôn là string
+                    raw_content = str(row.get('CONTENT', '')).strip()
 
-                    # KIỂM TRA HỢP LỆ TRÊN NỘI DUNG GỐC (Trước khi cắt gọt)
-                    if not is_valid_message(raw_content): continue
-                    
-                    # SAU ĐÓ MỚI CẮT GỌT
-                    content = preprocess_message(raw_content)
-                    if not content: continue # Nếu sau khi cắt mà không còn gì thì bỏ qua
+                    if not is_valid_message(raw_content): continue
+                    
+                    content = preprocess_message(raw_content)
+                    if not content: continue 
 
-                    # PHÂN LOẠI GIỜ VÀ LOẠI BỎ TIN NHẮN TRÙNG
-                    is_in_time = False
-                    if current_hour == 8:
-                        start = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0))
-                        end = datetime.datetime.combine(now.date(), datetime.time(1, 0))
-                        is_in_time = start <= full_datetime < end
-                    elif current_hour == 14:
-                        start = datetime.datetime.combine(now.date(), datetime.time(1, 0))
-                        end = datetime.datetime.combine(now.date(), datetime.time(13, 0))
-                        is_in_time = start <= full_datetime < end
-                    else: 
-                        # Chế độ TEST: lấy 24h qua nếu chạy ngoài giờ 8h và 14h
-                        is_in_time = (now - datetime.timedelta(hours=24)) <= full_datetime <= now
+                    is_in_time = False
+                    if current_hour == 8:
+                        start = datetime.datetime.combine(now.date() - datetime.timedelta(days=1), datetime.time(13, 0))
+                        end = datetime.datetime.combine(now.date(), datetime.time(1, 30)) # Nới 1.5h
+                        is_in_time = start <= full_datetime < end
+                    elif current_hour == 14:
+                        start = datetime.datetime.combine(now.date(), datetime.time(1, 0))
+                        end = datetime.datetime.combine(now.date(), datetime.time(14, 0)) # Khớp với cronjob 13h
+                        is_in_time = start <= full_datetime < end
+                    else: 
+                        is_in_time = (now - datetime.timedelta(hours=24)) <= full_datetime <= now
 
-                    if is_in_time and content not in messages[sheet_name]:
-                        messages[sheet_name].append(content)
-                except: continue
-        except Exception as e:
-            print(f"❌ Lỗi sheet '{sheet_name}': {e}")
-    return messages
+                    if is_in_time and content not in messages[sheet_name]:
+                        messages[sheet_name].append(content)
+                except: continue
+        except Exception as e:
+            print(f"❌ Lỗi sheet '{sheet_name}': {e}")
+    return messages
 
 # Tạo sheet mới để lưu kết quả
 def write_to_sheet(sheet_target_name, messages):
-    try:
-        # Lọc danh sách các sheet có dữ liệu
-        sheet_names_with_data = [name for name in sheet_names if messages[name]]
-        if not sheet_names_with_data:
-            return
-        
-        # Mở sheet mục tiêu, nếu chưa có thì tạo mới
-        try:
-            ws = spreadsheet.worksheet(sheet_target_name)
-        except gspread.exceptions.WorksheetNotFound:
-            ws = spreadsheet.add_worksheet(title=sheet_target_name, rows="1000", cols="20")
-            print(f"--- Đã tạo mới sheet: {sheet_target_name} ---")
+    try:
+        sheet_names_with_data = [name for name in sheet_names if messages.get(name)]
+        if not sheet_names_with_data:
+            print(f"--- Không có dữ liệu để ghi vào {sheet_target_name} ---")
+            return
+        
+        try:
+            ws = spreadsheet.worksheet(sheet_target_name)
+        except gspread.exceptions.WorksheetNotFound:
+            ws = spreadsheet.add_worksheet(title=sheet_target_name, rows="1000", cols="20")
 
-        # Lấy dữ liệu hiện tại để tránh ghi trùng
-        existing_data = ws.get_all_values()
-        
-        # Cập nhật tiêu đề cột (Header)
-        header = sheet_names_with_data
-        if not existing_data or existing_data[0] != header:
-            ws.update('A1', [header])
-            existing_data = [header]
+        existing_data = ws.get_all_values()
+        max_len = max(len(messages[s]) for s in sheet_names_with_data)
+        
+        rows_to_append = []
+        for i in range(max_len):
+            row = []
+            for sheet_name in sheet_names_with_data:
+                msg = messages[sheet_name][i] if i < len(messages[sheet_name]) else ""
+                row.append(msg)
+            
+            # Chỉ thêm vào danh sách chờ nếu dòng này chưa tồn tại trong sheet
+            if row not in existing_data:
+                rows_to_append.append(row)
 
-        max_len = max(len(messages[s]) for s in sheet_names_with_data)
-        added_count = 0
-
-        for i in range(max_len):
-            row = []
-            for sheet_name in sheet_names_with_data:
-                msg = messages[sheet_name][i] if i < len(messages[sheet_name]) else ""
-                row.append(msg)
-            
-            # Kiểm tra xem dòng này đã có trong sheet chưa trước khi ghi thêm
-            if row not in existing_data:
-                ws.append_row(row, value_input_option="USER_ENTERED")
-                existing_data.append(row)
-                added_count += 1
-        
-        print(f"✅ Hoàn tất ghi vào sheet [{sheet_target_name}]: Thêm {added_count} dòng mới.")
-    except Exception as e:
-        print(f"❌ Lỗi khi ghi vào sheet {sheet_target_name}: {e}")
+        if rows_to_append:
+            ws.append_rows(rows_to_append, value_input_option="USER_ENTERED")
+            print(f"✅ Đã ghi thêm {len(rows_to_append)} dòng mới vào [{sheet_target_name}]")
+        else:
+            print(f"ℹ️ Không có dữ liệu mới (trùng lặp) cho [{sheet_target_name}]")
+            
+    except Exception as e:
+        print(f"❌ Lỗi khi ghi vào sheet {sheet_target_name}: {e}")
         
         
 def get_driver():
