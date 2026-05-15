@@ -255,7 +255,28 @@ def get_driver():
     if proxy_url:
         options.add_argument(f"--proxy-server={proxy_url}")
 
-    driver = uc.Chrome(options=options)
+    import subprocess
+    import re
+
+    chrome_version = None
+    try:
+        # Lệnh này sẽ chạy thành công trên máy chủ Ubuntu của GitHub Actions
+        # Lấy output (ví dụ: "Google Chrome 147.0.7727.55")
+        result = subprocess.check_output(["google-chrome", "--version"]).decode("utf-8")
+        # Dùng Regex để tách lấy con số đầu tiên (147)
+        chrome_version = int(re.search(r"\d+", result).group(0))
+        print(
+            f"✅ Đã tự động nhận diện Chrome trên máy chủ là version: {chrome_version}"
+        )
+    except Exception:
+        # Nếu chạy thủ công trên Windows ở máy tính cá nhân nó sẽ nhảy vào đây
+        pass
+
+    # Khởi tạo Driver với đúng phiên bản máy chủ đang có
+    if chrome_version:
+        driver = uc.Chrome(options=options, version_main=chrome_version)
+    else:
+        driver = uc.Chrome(options=options)
 
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
