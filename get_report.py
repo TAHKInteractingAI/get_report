@@ -43,6 +43,10 @@ _patch_uc_del()
 # =========================
 # CONFIG
 # =========================
+os.environ["TZ"] = "Asia/Ho_Chi_Minh"
+if hasattr(time, "tzset"):
+    time.tzset()
+
 email = os.environ.get("TEAMS_EMAIL")
 password = os.environ.get("TEAMS_PASSWORD")
 chat = "GetReport"
@@ -115,6 +119,9 @@ def display_screenshot(driver: webdriver.Chrome, file_name: str = "screenshot.pn
     time.sleep(3)
 
 
+save_screenshot = display_screenshot
+
+
 def send_message(driver, message):
     try:
         message_box = WebDriverWait(driver, 15).until(
@@ -122,7 +129,12 @@ def send_message(driver, message):
         )
 
         for line in message.split("\n"):
-            message_box.send_keys(line)
+            try:
+                message_box.send_keys(line)
+            except Exception:
+                # Dự phòng khi dòng tin nhắn có ký tự ngoài BMP (Emoji) khiến ChromeDriver send_keys báo lỗi
+                safe_line = "".join(c for c in line if ord(c) <= 0xFFFF)
+                message_box.send_keys(safe_line)
             message_box.send_keys(Keys.SHIFT, Keys.ENTER)
 
         display_screenshot(driver, "after_typing_message.png")
@@ -136,21 +148,89 @@ def send_message(driver, message):
 
 
 def open_chat(driver, chat_name):
+    """Mở nhóm chat an toàn bằng cả danh sách ngoài và thanh Filter bên trái."""
+    wait = WebDriverWait(driver, 20)
+    chat_item_xpath = (
+        '//*[contains(@data-tid, "chat-list-item") '
+        'or contains(@data-tid, "chat-item") '
+        'or @data-item-type="chat" '
+        'or @role="listitem" '
+        'or @role="treeitem"]'
+    )
+
     try:
-        # Đã dùng normalize-space để khớp 100% tên, chống gửi nhầm nhóm
-        chat_element = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable(
-                (By.XPATH, f"//span[normalize-space(text())='{chat_name}']")
+        # 1. Thử tìm trực tiếp trên danh sách hiển thị
+        wait.until(EC.presence_of_element_located((By.XPATH, chat_item_xpath)))
+        groups = driver.find_elements(By.XPATH, chat_item_xpath)
+
+        for g in groups:
+            lines = [x.strip() for x in g.text.splitlines() if x.strip()]
+            if not lines:
+                continue
+            if lines[0] in ["Unread", "Chưa đọc"]:
+                lines.pop(0)
+            if not lines:
+                continue
+
+            txt = lines[0]
+            if not txt:
+                txt = g.get_attribute("aria-label") or ""
+
+            if txt == chat_name or chat_name.startswith(txt.replace("...", "").strip()):
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", g)
+                time.sleep(1)
+                g.click()
+                time.sleep(3)
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"]'))
+                )
+                display_screenshot(driver, "after_opening_chat.png")
+                print(f"📂 Đã mở đúng nhóm: {chat_name}")
+                return True
+
+        print(f"⚠️ Không thấy {chat_name} ở ngoài, thử dùng thanh Filter...")
+
+        # 2. Mở thanh Filter bên trái nếu đang ẩn
+        try:
+            filter_icon_xpath = (
+                '//button[@data-testid="simple-collab-left-rail-header-sticky-filter-v2-button"]'
+                ' | //button[contains(@aria-keyshortcuts, "Ctrl+Shift+F")]'
             )
+            filter_icon = driver.find_element(By.XPATH, filter_icon_xpath)
+            driver.execute_script("arguments[0].click();", filter_icon)
+            time.sleep(1)
+        except Exception:
+            pass
+
+        left_search_xpath = (
+            '//input[@data-testid="simple-collab-left-rail-sticky-filter-input"]'
+            ' | //input[@id="simple-collab-left-rail-sticky-filter-input-id"]'
+            ' | //input[contains(@placeholder, "Filter") or contains(@placeholder, "Lọc")]'
         )
-        chat_element.click()
+        search = wait.until(EC.presence_of_element_located((By.XPATH, left_search_xpath)))
+        search.click()
+        search.send_keys(Keys.CONTROL + "a")
+        search.send_keys(Keys.BACKSPACE)
+        search.send_keys(chat_name)
+        time.sleep(3)
+
+        filtered_result_xpath = f"//span[normalize-space(text())='{chat_name}']"
+        filtered_result = wait.until(
+            EC.presence_of_element_located((By.XPATH, filtered_result_xpath))
+        )
+        driver.execute_script("arguments[0].click();", filtered_result)
+        time.sleep(3)
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"]'))
         )
         display_screenshot(driver, "after_opening_chat.png")
+        print(f"📂 Đã mở nhóm qua thanh Filter: {chat_name}")
+        return True
+
     except Exception as e:
         display_screenshot(driver, "open_chat_error.png")
         print(f"❌ Lỗi khi mở chat '{chat_name}': {e}")
+        return False
 
 
 def combine_messages(messages_dict):
@@ -203,9 +283,102 @@ def is_valid_message(content):
     return bool(MESSAGE_PATTERN.match(content))
 
 
-def get_filtered_messages(spreadsheet, sheet_names, current_hour):
-    tz = pytz.timezone("Asia/Ho_Chi_Minh")
-    now = datetime.datetime.now(tz).replace(tzinfo=None)
+# =========================
+# TIME WINDOW CHO GET_REPORT (2 CA CRONJOB: 08:00 AM VÀ 02:00 PM / 14:00 - GIỜ HỒ CHÍ MINH)
+# =========================
+def get_hcm_now():
+    """Luôn lấy giờ hiện tại chuẩn theo múi giờ Asia/Ho_Chi_Minh (UTC+7)."""
+    return datetime.datetime.now(datetime.timezone.utc).astimezone(local_tz)
+
+
+def get_report_time_window(now=None):
+    """
+    Đồng bộ khung giờ lọc báo cáo với 3 ca cào tin nhắn của get_message (02:00, 13:00, 18:00):
+    - Ca 08:00 AM (chạy buổi sáng, hour < 12):
+        Lấy tin nhắn từ 13:00:00 hôm qua -> 02:00:00 sáng hôm nay
+        (Tổng hợp dữ liệu của 2 ca get_message lúc 18:00 hôm qua và 02:00 sáng nay).
+    - Ca 02:00 PM / 14:00 (chạy buổi chiều, hour >= 12):
+        Lấy tin nhắn từ 02:00:00 sáng hôm nay -> 14:00:00 chiều hôm nay
+        (Tổng hợp dữ liệu của ca get_message lúc 13:00 trưa nay).
+    """
+    if now is None:
+        now = get_hcm_now()
+    elif now.tzinfo is None:
+        now = local_tz.localize(now)
+    else:
+        now = now.astimezone(local_tz)
+
+    ref_time = now
+    ci_trigger_str = os.getenv("CI_TRIGGER_TIME", "").strip()
+    if ci_trigger_str:
+        try:
+            parsed_trigger = datetime.datetime.strptime(ci_trigger_str, "%Y-%m-%d %H:%M:%S")
+            ref_time = local_tz.localize(parsed_trigger)
+        except Exception:
+            ref_time = now
+
+    ref_date = ref_time.date()
+    ref_hour = ref_time.hour
+
+    if ref_hour < 12:
+        shift_name = "Ca báo cáo 08:00 AM (8h sáng)"
+        start_dt = datetime.datetime.combine(
+            ref_date - datetime.timedelta(days=1),
+            datetime.time(13, 0, 0),
+        )
+        end_dt = datetime.datetime.combine(
+            ref_date,
+            datetime.time(2, 0, 0),
+        )
+    else:
+        shift_name = "Ca báo cáo 02:00 PM (14h chiều)"
+        start_dt = datetime.datetime.combine(
+            ref_date,
+            datetime.time(2, 0, 0),
+        )
+        end_dt = datetime.datetime.combine(
+            ref_date,
+            datetime.time(14, 0, 0),
+        )
+
+    return start_dt, end_dt, shift_name
+
+
+def _parse_sheet_row_datetime(date_val, time_val):
+    """Đọc DATE (YYYY-MM-DD) và TIME (HH:MM:SS) từ Google Sheet một cách chính xác, tránh đảo ngày/tháng."""
+    date_str = str(date_val).strip()
+    time_str = str(time_val).strip()
+    if not date_str or not time_str:
+        return None
+
+    date_part = None
+    for d_fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+        try:
+            date_part = datetime.datetime.strptime(date_str, d_fmt).date()
+            break
+        except ValueError:
+            continue
+    if date_part is None:
+        date_part = parser.parse(date_str).date()
+
+    time_part = None
+    for t_fmt in ("%H:%M:%S", "%H:%M"):
+        try:
+            time_part = datetime.datetime.strptime(time_str, t_fmt).time()
+            break
+        except ValueError:
+            continue
+    if time_part is None:
+        time_part = parser.parse(time_str).time()
+
+    return datetime.datetime.combine(date_part, time_part)
+
+
+def get_filtered_messages(spreadsheet, sheet_names, current_hour=None, time_window=None):
+    if time_window is not None:
+        start_dt, end_dt = time_window
+    else:
+        start_dt, end_dt, _ = get_report_time_window()
 
     messages = {sheet_name: [] for sheet_name in sheet_names}
     EXCLUDED_SHEETS = [
@@ -224,9 +397,9 @@ def get_filtered_messages(spreadsheet, sheet_names, current_hour):
 
             for row in data:
                 try:
-                    date_part = parser.parse(str(row["DATE"])).date()
-                    time_part = parser.parse(str(row["TIME"])).time()
-                    full_datetime = datetime.datetime.combine(date_part, time_part)
+                    full_datetime = _parse_sheet_row_datetime(row.get("DATE", ""), row.get("TIME", ""))
+                    if full_datetime is None:
+                        continue
 
                     raw_content = str(row.get("CONTENT", "")).strip()
 
@@ -237,32 +410,11 @@ def get_filtered_messages(spreadsheet, sheet_names, current_hour):
                     if not content:
                         continue
 
-                    is_in_time = False
-                    if current_hour == 8:
-                        start = datetime.datetime.combine(
-                            now.date() - datetime.timedelta(days=1),
-                            datetime.time(13, 0),
-                        )
-                        end = datetime.datetime.combine(
-                            now.date(), datetime.time(1, 30)
-                        )
-                        is_in_time = start <= full_datetime < end
-                    elif current_hour == 14:
-                        start = datetime.datetime.combine(
-                            now.date(), datetime.time(1, 0)
-                        )
-                        end = datetime.datetime.combine(
-                            now.date(), datetime.time(14, 0)
-                        )
-                        is_in_time = start <= full_datetime < end
-                    else:
-                        is_in_time = (
-                            (now - datetime.timedelta(hours=24)) <= full_datetime <= now
-                        )
+                    is_in_time = start_dt <= full_datetime <= end_dt
 
                     if is_in_time and content not in messages[sheet_name]:
                         messages[sheet_name].append(content)
-                except:
+                except Exception:
                     continue
         except Exception as e:
             print(f"❌ Lỗi sheet '{sheet_name}': {e}")
@@ -387,6 +539,14 @@ def get_driver():
         driver = uc.Chrome(options=options, version_main=chrome_version)
     else:
         driver = uc.Chrome(options=options)
+
+    try:
+        driver.execute_cdp_cmd(
+            "Emulation.setTimezoneOverride",
+            {"timezoneId": "Asia/Ho_Chi_Minh"},
+        )
+    except Exception:
+        pass
 
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
@@ -534,6 +694,25 @@ def login():
 
 
 if __name__ == "__main__":
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    hcm_now = get_hcm_now()
+    start_dt, end_dt, shift_name = get_report_time_window(hcm_now)
+    ci_trigger_env = os.getenv("CI_TRIGGER_TIME", "N/A (Chạy trực tiếp)")
+    ci_event_name = os.getenv("GITHUB_EVENT_NAME", "local_run")
+
+    print("=" * 65)
+    print("⏰ KIỂM TRA THỜI GIAN & CA BÁO CÁO (MÚI GIỜ HỒ CHÍ MINH - UTC+7)")
+    print(f" - Sự kiện kích hoạt (CI Event) : {ci_event_name}")
+    print(f" - Giờ CI nhận lệnh (HCM)       : {ci_trigger_env}")
+    print(f" - Giờ máy chủ hiện tại (UTC)   : {utc_now.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    print(f" - Giờ Việt Nam hiện tại (HCM)  : {hcm_now.strftime('%Y-%m-%d %H:%M:%S %Z%z')}")
+    print(f" - Ca báo cáo được nhận diện    : {shift_name}")
+    print(
+        f" - Khung giờ lọc báo cáo        : "
+        f"{start_dt.strftime('%Y-%m-%d %H:%M:%S')} -> {end_dt.strftime('%Y-%m-%d %H:%M:%S')} (Asia/Ho_Chi_Minh)"
+    )
+    print("=" * 65)
+
     # Khởi tạo kết nối Google Sheets
     spreadsheet = None
     sheet_names = []
@@ -563,13 +742,18 @@ if __name__ == "__main__":
         driver.save_screenshot("after_login.png")
         open_chat(driver, chat)
 
-        current_hour = datetime.datetime.now(pytz.timezone("Asia/Ho_Chi_Minh")).hour
-
         if spreadsheet and sheet_names:
-            messages = get_filtered_messages(spreadsheet, sheet_names, current_hour)
+            messages = get_filtered_messages(
+                spreadsheet,
+                sheet_names,
+                time_window=(start_dt, end_dt),
+            )
             combined_msgs = combine_messages(messages)
 
-            print(f"\n✅ Báo cáo lọc được lúc {current_hour}h:")
+            print(
+                f"\n✅ Báo cáo lọc được cho [{shift_name}] "
+                f"({start_dt.strftime('%Y-%m-%d %H:%M:%S')} -> {end_dt.strftime('%Y-%m-%d %H:%M:%S')}):"
+            )
 
             for sheet_name, msg_content in combined_msgs.items():
                 print(f"Testing\nSheet: [ {sheet_name} ]\nMessage: [ {msg_content} ]\n")
