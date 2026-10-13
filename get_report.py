@@ -57,7 +57,13 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-MESSAGE_PATTERN = re.compile(r".*\+\s*(\d+)/.*", re.IGNORECASE | re.DOTALL)
+MESSAGE_PATTERN = re.compile(
+    r".*(?:[+-]\s*\d+\s*/|check\s*[-_ ]?out).*",
+    re.IGNORECASE | re.DOTALL,
+)
+CHECKOUT_PATTERN = re.compile(r"check\s*[-_ ]?out", re.IGNORECASE)
+CHECKIN_PATTERN = re.compile(r"check\s*[-_ ]?in", re.IGNORECASE)
+RESET_PATTERN = re.compile(r"^\s*reset\s*15\s*min", re.IGNORECASE)
 
 
 # =========================
@@ -242,8 +248,21 @@ def combine_messages(messages_dict):
 
 
 def preprocess_message(content):
+    content = str(content or "").replace("\xa0", " ")
     content = re.sub(r"-\s+-", "-", content)
-    content = re.sub(r"\s*[+]+\s*(\d+/)\s*", r"\n+ \1 ", content)
+    # Tách các trường báo cáo bị dính liền dòng (ví dụ: '12/10/2026task:...', '...thiếu Kết quả:...', '+ 10/ [...]link proof:...')
+    content = re.sub(
+        r"(?<!\n)\s*((?:task|kết\s*quả|tiến\s*độ(?:\s*công\s*việc)?|link\s*proof)\s*:)",
+        r"\n\1",
+        content,
+        flags=re.IGNORECASE,
+    )
+    content = re.sub(r"\s*[+]+\s*(\d+\s*/)\s*", r"\n+ \1 ", content)
+    content = re.sub(
+        r"(?:^|\n|\s)[-]+\s*((?:6|7|8|9|10)\s*/)\s*",
+        r"\n- \1 ",
+        content,
+    )
 
     lines = content.splitlines()
     processed_lines = []
@@ -253,7 +272,7 @@ def preprocess_message(content):
         if not line:
             continue
 
-        if re.match(r"^\+\s*(6|7|8|9|10)\s*/", line):
+        if re.match(r"^[+-]?\s*(6|7|8|9|10)\s*/", line):
             continue
 
         if re.match(r"^(\+|\d+\.|=>|-)", line):
@@ -280,7 +299,15 @@ def preprocess_message(content):
 
 
 def is_valid_message(content):
-    return bool(MESSAGE_PATTERN.match(content))
+    if not content or not str(content).strip():
+        return False
+    text = str(content).strip()
+    if RESET_PATTERN.search(text):
+        return False
+    first_line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+    if CHECKIN_PATTERN.search(first_line) and not CHECKOUT_PATTERN.search(first_line):
+        return False
+    return bool(MESSAGE_PATTERN.match(text))
 
 
 # =========================
