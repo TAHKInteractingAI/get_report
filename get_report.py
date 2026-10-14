@@ -320,13 +320,13 @@ def get_hcm_now():
 
 def get_report_time_window(now=None):
     """
-    Đồng bộ khung giờ lọc báo cáo với 3 ca cào tin nhắn của get_message (02:00, 13:00, 18:00):
+    Đồng bộ khung giờ lọc báo cáo nối tiếp giữa 2 ca cronjob của get_report:
     - Ca 08:00 AM (chạy buổi sáng, hour < 12):
-        Lấy tin nhắn từ 13:00:00 hôm qua -> 02:00:00 sáng hôm nay
-        (Tổng hợp dữ liệu của 2 ca get_message lúc 18:00 hôm qua và 02:00 sáng nay).
+        Lấy tin nhắn từ 14:00:00 hôm qua -> 02:00:00 sáng hôm nay
+        (Nối tiếp ca 14:00 chiều hôm qua, lấy toàn bộ ca chiều/tối/đêm).
     - Ca 02:00 PM / 14:00 (chạy buổi chiều, hour >= 12):
         Lấy tin nhắn từ 02:00:00 sáng hôm nay -> 14:00:00 chiều hôm nay
-        (Tổng hợp dữ liệu của ca get_message lúc 13:00 trưa nay).
+        (Lấy toàn bộ ca sáng và trưa hôm nay).
     """
     if now is None:
         now = get_hcm_now()
@@ -351,7 +351,7 @@ def get_report_time_window(now=None):
         shift_name = "Ca báo cáo 08:00 AM (8h sáng)"
         start_dt = datetime.datetime.combine(
             ref_date - datetime.timedelta(days=1),
-            datetime.time(13, 0, 0),
+            datetime.time(14, 0, 0),
         )
         end_dt = datetime.datetime.combine(
             ref_date,
@@ -684,7 +684,9 @@ def login():
             )
         )
         pass_box.send_keys(password)
+        time.sleep(1)
         pass_box.send_keys(Keys.RETURN)
+        time.sleep(3)
 
         # 4. Xử lý nút "Stay signed in?" (Chọn No để không lưu đăng nhập)
         try:
@@ -693,7 +695,9 @@ def login():
                 EC.element_to_be_clickable(
                     (
                         By.XPATH,
-                        '//*[@id="declineButton"] | //*[@id="idBtn_Back"] | //*[@value="No"] | //button[contains(., "No")]',
+                        '//*[@id="declineButton"] | //*[@id="idBtn_Back"] | //*[@value="No"] '
+                        '| //button[@data-testid="secondaryButton"] '
+                        '| //button[normalize-space(.)="No" or normalize-space(.)="Không"]',
                     )
                 )
             )
@@ -701,6 +705,18 @@ def login():
             time.sleep(3)
         except:
             print("⚠️ Không thấy màn hình Stay signed in, tiếp tục...")
+            pass
+
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+            if "try again later" in body_text or "can't sign you in right now" in body_text:
+                save_screenshot(driver, "try_again_later_blocked.png")
+                raise RuntimeError(
+                    "Microsoft tạm khóa phiên đăng nhập (Try again later / We can't sign you in right now)."
+                )
+        except RuntimeError:
+            raise
+        except Exception:
             pass
 
         print("✅ Đăng nhập thành công")
