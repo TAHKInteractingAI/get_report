@@ -26,7 +26,7 @@ jobs:
           echo " - Giờ UTC         : ${TRIGGER_UTC} UTC"
           echo " - Giờ Hồ Chí Minh : ${TRIGGER_HCM} (+07)"
           if [ "$HOUR_HCM" -lt 12 ]; then
-            SHIFT="Ca 08:00 AM (Lọc từ 14:00 hôm qua -> 02:00 sáng nay)"
+            SHIFT="Ca 08:00 AM (Lọc từ 13:00 hôm qua -> 02:00 sáng nay)"
           else
             SHIFT="Ca 02:00 PM / 14:00 (Lọc từ 02:00 sáng nay -> 14:00 chiều nay)"
           fi

@@ -250,16 +250,18 @@ def combine_messages(messages_dict):
 def preprocess_message(content):
     content = str(content or "").replace("\xa0", " ")
     content = re.sub(r"-\s+-", "-", content)
-    # Tách các trường báo cáo bị dính liền dòng (ví dụ: '12/10/2026task:...', '...thiếu Kết quả:...', '+ 10/ [...]link proof:...')
+    # Tách các trường tiêu đề / báo cáo bị dính liền dòng (ưu tiên cụm dài trước)
     content = re.sub(
-        r"(?<!\n)\s*((?:task|kết\s*quả|tiến\s*độ(?:\s*công\s*việc)?|link\s*proof)\s*:)",
+        r"(?<!\n)\s*((?:tiêu\s*đề\s*task|task|kết\s*quả(?:\s*làm\s*được)?|tiến\s*độ(?:\s*công\s*việc)?|link\s*proof)\s*:)",
         r"\n\1",
         content,
         flags=re.IGNORECASE,
     )
+    # Tách mục 6/..10/ bị dính liền chữ phía trước (ví dụ: 'bot- 6/', '...hôm nay+ 6/')
+    content = re.sub(r"([^\n\s])\s*([+-]\s*(?:[6-9]|10)\s*/)", r"\1\n\2", content)
     content = re.sub(r"\s*[+]+\s*(\d+\s*/)\s*", r"\n+ \1 ", content)
     content = re.sub(
-        r"(?:^|\n|\s)[-]+\s*((?:6|7|8|9|10)\s*/)\s*",
+        r"\s*[-]+\s*((?:6|7|8|9|10)\s*/)\s*",
         r"\n- \1 ",
         content,
     )
@@ -272,7 +274,7 @@ def preprocess_message(content):
         if not line:
             continue
 
-        if re.match(r"^[+-]?\s*(6|7|8|9|10)\s*/", line):
+        if re.match(r"^[+*•-]?\s*(?:6|7|8|9|10)\s*/", line):
             continue
 
         if re.match(r"^(\+|\d+\.|=>|-)", line):
@@ -304,10 +306,27 @@ def is_valid_message(content):
     text = str(content).strip()
     if RESET_PATTERN.search(text):
         return False
+
+    # Dấu hiệu chắc chắn là báo cáo kết quả / hoàn thành ca (CheckOut / Report):
+    # 1. Có từ khóa checkout / check-out / check out
+    has_checkout_kw = bool(CHECKOUT_PATTERN.search(text))
+    # 2. Có checklist items 6..10
+    has_checklist_items = bool(re.search(r"[+-]\s*(?:[6-9]|10)\s*/", text))
+    # 3. Có báo cáo kết quả công việc / tiêu đề task hoàn thành
+    has_work_results = bool(
+        re.search(r"(?:tiêu\s*đề\s*task|kết\s*quả|tiến\s*độ|link\s*proof)", text, re.IGNORECASE)
+    )
+
+    is_report = has_checkout_kw or has_checklist_items or has_work_results
+
     first_line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
-    if CHECKIN_PATTERN.search(first_line) and not CHECKOUT_PATTERN.search(first_line):
+    is_checkin_header = bool(CHECKIN_PATTERN.search(first_line))
+
+    # Nếu dòng đầu là CheckIn nhưng KHÔNG CÓ bất kỳ kết quả, tiêu đề task hay checklist 6-10 -> CheckIn thật
+    if is_checkin_header and not (has_checklist_items or has_work_results or has_checkout_kw):
         return False
-    return bool(MESSAGE_PATTERN.match(text))
+
+    return is_report
 
 
 # =========================
@@ -320,13 +339,13 @@ def get_hcm_now():
 
 def get_report_time_window(now=None):
     """
-    Đồng bộ khung giờ lọc báo cáo nối tiếp giữa 2 ca cronjob của get_report:
+    Đồng bộ khung giờ lọc báo cáo với 3 ca cào tin nhắn của get_message (02:00, 13:00, 18:00):
     - Ca 08:00 AM (chạy buổi sáng, hour < 12):
-        Lấy tin nhắn từ 14:00:00 hôm qua -> 02:00:00 sáng hôm nay
-        (Nối tiếp ca 14:00 chiều hôm qua, lấy toàn bộ ca chiều/tối/đêm).
+        Lấy tin nhắn từ 13:00:00 hôm qua -> 02:00:00 sáng hôm nay
+        (Tổng hợp dữ liệu của 2 ca get_message lúc 18:00 hôm qua và 02:00 sáng nay).
     - Ca 02:00 PM / 14:00 (chạy buổi chiều, hour >= 12):
         Lấy tin nhắn từ 02:00:00 sáng hôm nay -> 14:00:00 chiều hôm nay
-        (Lấy toàn bộ ca sáng và trưa hôm nay).
+        (Tổng hợp dữ liệu của ca get_message lúc 13:00 trưa nay).
     """
     if now is None:
         now = get_hcm_now()
@@ -351,7 +370,7 @@ def get_report_time_window(now=None):
         shift_name = "Ca báo cáo 08:00 AM (8h sáng)"
         start_dt = datetime.datetime.combine(
             ref_date - datetime.timedelta(days=1),
-            datetime.time(14, 0, 0),
+            datetime.time(13, 0, 0),
         )
         end_dt = datetime.datetime.combine(
             ref_date,
