@@ -128,11 +128,80 @@ def display_screenshot(driver: webdriver.Chrome, file_name: str = "screenshot.pn
 save_screenshot = display_screenshot
 
 
+def dismiss_teams_popups(driver):
+    """Tự động đóng các banner và popup làm phiền sau đăng nhập trên Teams."""
+    try:
+        # 1. Bấm nút 'Use the web app instead' nếu có trên Linux
+        use_web_btn = driver.find_elements(
+            By.XPATH,
+            '//a[contains(text(), "Use the web app") or contains(text(), "Dùng ứng dụng web")] | '
+            '//button[contains(text(), "Use the web app") or contains(text(), "Dùng ứng dụng web")]'
+        )
+        for btn in use_web_btn:
+            try:
+                if btn.is_displayed():
+                    driver.execute_script("arguments[0].click();", btn)
+                    print("👉 Đã bấm nút 'Use the web app instead'")
+                    time.sleep(1)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    try:
+        # 2. Đóng banner Turn on notifications / What's new / Dismiss
+        close_banner_btns = driver.find_elements(
+            By.XPATH,
+            '//button[contains(@aria-label, "Dismiss") or contains(@aria-label, "Đóng") or contains(@aria-label, "Close") or contains(., "Dismiss") or contains(., "Not now")]'
+        )
+        for btn in close_banner_btns:
+            try:
+                if btn.is_displayed():
+                    driver.execute_script("arguments[0].click();", btn)
+                    time.sleep(1)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def ensure_chat_tab(driver):
+    """Đảm bảo đang ở tab Chat (Trò chuyện) trên thanh điều hướng Teams."""
+    dismiss_teams_popups(driver)
+    try:
+        chat_btn = WebDriverWait(driver, 8).until(
+            EC.element_to_be_clickable(
+                (
+                    By.XPATH,
+                    '//button[contains(@data-tid, "app-bar-chat") '
+                    'or contains(@aria-label, "Chat") '
+                    'or contains(@aria-label, "Trò chuyện")]'
+                )
+            )
+        )
+        driver.execute_script("arguments[0].click();", chat_btn)
+        time.sleep(2)
+        print("📂 Đã bấm chuyển sang tab Chat.")
+    except Exception as e:
+        print(f"ℹ️ Tab Chat có thể đã được chọn sẵn hoặc không tìm thấy nút: {e}")
+
+
 def send_message(driver, message):
     try:
-        message_box = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"]'))
+        input_xpath = (
+            '//div[@contenteditable="true"] '
+            '| //div[@role="textbox"] '
+            '| //div[@data-tid="ckeditor-replyConversation"]'
         )
+        message_box = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, input_xpath))
+        )
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", message_box)
+        time.sleep(1)
+        try:
+            message_box.click()
+        except Exception:
+            driver.execute_script("arguments[0].focus();", message_box)
 
         for line in message.split("\n"):
             try:
@@ -144,18 +213,43 @@ def send_message(driver, message):
             message_box.send_keys(Keys.SHIFT, Keys.ENTER)
 
         display_screenshot(driver, "after_typing_message.png")
-        time.sleep(3)
-        message_box.send_keys(Keys.ENTER)
+        time.sleep(2)
+
+        # Gửi tin nhắn bằng nút Gửi hoặc phím Enter
+        sent = False
+        try:
+            send_btn = driver.find_elements(
+                By.XPATH,
+                '//button[@data-tid="chatPane-send-message-button"] '
+                '| //button[contains(@aria-label, "Send") or contains(@aria-label, "Gửi")]'
+            )
+            for btn in send_btn:
+                if btn.is_displayed():
+                    driver.execute_script("arguments[0].click();", btn)
+                    sent = True
+                    break
+        except Exception:
+            pass
+
+        if not sent:
+            message_box.send_keys(Keys.ENTER)
+
         time.sleep(3)
         display_screenshot(driver, "after_sending_message.png")
+        print("✅ Đã gửi thành công 1 tin nhắn.")
 
     except Exception as e:
         print(f"❌ Lỗi khi gửi tin nhắn: {e}")
+        display_screenshot(driver, "send_message_error.png")
 
 
 def open_chat(driver, chat_name):
-    """Mở nhóm chat an toàn bằng cả danh sách ngoài và thanh Filter bên trái."""
+    """Mở nhóm chat an toàn: chuyển tab Chat, xử lý popup, tìm trong danh sách và dùng Filter."""
     wait = WebDriverWait(driver, 20)
+
+    # 0. Đóng popup và chuyển tab Chat
+    ensure_chat_tab(driver)
+
     chat_item_xpath = (
         '//*[contains(@data-tid, "chat-list-item") '
         'or contains(@data-tid, "chat-item") '
@@ -165,7 +259,7 @@ def open_chat(driver, chat_name):
     )
 
     try:
-        # 1. Thử tìm trực tiếp trên danh sách hiển thị
+        # 1. Chờ danh sách nhóm tải xong
         wait.until(EC.presence_of_element_located((By.XPATH, chat_item_xpath)))
         groups = driver.find_elements(By.XPATH, chat_item_xpath)
 
@@ -182,25 +276,29 @@ def open_chat(driver, chat_name):
             if not txt:
                 txt = g.get_attribute("aria-label") or ""
 
-            if txt == chat_name or chat_name.startswith(txt.replace("...", "").strip()):
+            if txt == chat_name or chat_name.lower() in txt.lower() or chat_name.startswith(txt.replace("...", "").strip()):
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", g)
                 time.sleep(1)
-                g.click()
+                driver.execute_script("arguments[0].click();", g)
                 time.sleep(3)
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"]'))
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((
+                        By.XPATH,
+                        '//div[@contenteditable="true"] | //div[@role="textbox"] | //div[@data-tid="ckeditor-replyConversation"]'
+                    ))
                 )
                 display_screenshot(driver, "after_opening_chat.png")
                 print(f"📂 Đã mở đúng nhóm: {chat_name}")
                 return True
 
-        print(f"⚠️ Không thấy {chat_name} ở ngoài, thử dùng thanh Filter...")
+        print(f"⚠️ Không thấy {chat_name} ở danh sách ngoài, thử dùng thanh Filter...")
 
         # 2. Mở thanh Filter bên trái nếu đang ẩn
         try:
             filter_icon_xpath = (
                 '//button[@data-testid="simple-collab-left-rail-header-sticky-filter-v2-button"]'
                 ' | //button[contains(@aria-keyshortcuts, "Ctrl+Shift+F")]'
+                ' | //button[contains(@aria-label, "Filter") or contains(@aria-label, "Lọc")]'
             )
             filter_icon = driver.find_element(By.XPATH, filter_icon_xpath)
             driver.execute_script("arguments[0].click();", filter_icon)
@@ -218,16 +316,22 @@ def open_chat(driver, chat_name):
         search.send_keys(Keys.CONTROL + "a")
         search.send_keys(Keys.BACKSPACE)
         search.send_keys(chat_name)
-        time.sleep(3)
+        time.sleep(4)
 
-        filtered_result_xpath = f"//span[normalize-space(text())='{chat_name}']"
+        filtered_result_xpath = (
+            f"//*[contains(@data-tid, 'chat-list-item') or contains(@data-tid, 'chat-item') or @role='listitem' or @role='treeitem'][.//*[contains(text(), '{chat_name}')]] "
+            f"| //span[contains(normalize-space(text()), '{chat_name}')]"
+        )
         filtered_result = wait.until(
             EC.presence_of_element_located((By.XPATH, filtered_result_xpath))
         )
         driver.execute_script("arguments[0].click();", filtered_result)
         time.sleep(3)
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"]'))
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((
+                By.XPATH,
+                '//div[@contenteditable="true"] | //div[@role="textbox"] | //div[@data-tid="ckeditor-replyConversation"]'
+            ))
         )
         display_screenshot(driver, "after_opening_chat.png")
         print(f"📂 Đã mở nhóm qua thanh Filter: {chat_name}")
@@ -703,11 +807,43 @@ def login():
             print("⚠️ Không thấy màn hình Stay signed in, tiếp tục...")
             pass
 
-        print("✅ Đăng nhập thành công")
+        print("✅ Đăng nhập tài khoản thành công")
 
-        # Chờ giao diện Teams load hẳn
-        time.sleep(15)
+        # Chờ giao diện Teams load hẳn và xử lý popup ban đầu
+        print("⏳ Đang chờ giao diện Teams nạp xong (tối đa 45s)...")
+        start_wait = time.time()
+        while time.time() - start_wait < 45:
+            # Kiểm tra popup "Use the web app instead" trên Linux
+            try:
+                use_web_btn = driver.find_elements(
+                    By.XPATH,
+                    '//a[contains(text(), "Use the web app") or contains(text(), "Dùng ứng dụng web")] | '
+                    '//button[contains(text(), "Use the web app") or contains(text(), "Dùng ứng dụng web")]'
+                )
+                for btn in use_web_btn:
+                    if btn.is_displayed():
+                        driver.execute_script("arguments[0].click();", btn)
+                        print("👉 Đã bấm nút 'Use the web app instead'")
+                        time.sleep(2)
+            except Exception:
+                pass
 
+            current_url = (driver.current_url or "").lower()
+            is_login_domain = any(
+                d in current_url
+                for d in ("login.microsoftonline.com", "login.live.com", "account.live.com")
+            )
+            nav_items = driver.find_elements(
+                By.XPATH,
+                '//button | //div[@role="button"] | //div[@role="tab"] | //div[@role="listitem"] | //*[@role="treeitem"]'
+            )
+            if len(nav_items) > 5 and not is_login_domain:
+                print(f"✅ Giao diện chính Teams đã sẵn sàng sau {int(time.time() - start_wait)} giây!")
+                dismiss_teams_popups(driver)
+                return driver
+            time.sleep(3)
+
+        dismiss_teams_popups(driver)
         return driver
 
     except Exception as e:
@@ -765,9 +901,21 @@ if __name__ == "__main__":
         print("❌ Đăng nhập Teams không thành công!")
         exit(1)
 
+    has_error = False
     try:
         driver.save_screenshot("after_login.png")
-        open_chat(driver, chat)
+
+        # Thử mở nhóm chat với retry
+        chat_opened = False
+        for attempt in range(1, 4):
+            print(f"📂 Đang mở nhóm chat '{chat}' (lần thử {attempt}/3)...")
+            if open_chat(driver, chat):
+                chat_opened = True
+                break
+            time.sleep(3)
+
+        if not chat_opened:
+            print(f"❌ KHÔNG thể mở nhóm chat '{chat}' trên Teams sau 3 lần thử!")
 
         if spreadsheet and sheet_names:
             messages = get_filtered_messages(
@@ -782,10 +930,16 @@ if __name__ == "__main__":
                 f"({start_dt.strftime('%Y-%m-%d %H:%M:%S')} -> {end_dt.strftime('%Y-%m-%d %H:%M:%S')}):"
             )
 
-            for sheet_name, msg_content in combined_msgs.items():
-                print(f"Testing\nSheet: [ {sheet_name} ]\nMessage: [ {msg_content} ]\n")
-                message = f"[ {sheet_name} ]\n" + msg_content
-                send_message(driver, message)
+            if combined_msgs and chat_opened:
+                for sheet_name, msg_content in combined_msgs.items():
+                    print(f"Testing\nSheet: [ {sheet_name} ]\nMessage: [ {msg_content} ]\n")
+                    message = f"[ {sheet_name} ]\n" + msg_content
+                    send_message(driver, message)
+            elif combined_msgs and not chat_opened:
+                print(f"⚠️ Có {len(combined_msgs)} báo cáo cần gửi nhưng bỏ qua gửi Teams do không mở được nhóm chat '{chat}'.")
+                has_error = True
+            else:
+                print("ℹ️ Không có tin nhắn báo cáo nào trong khung giờ này.")
 
             write_to_sheet(spreadsheet, sheet_names, "Report", messages)
             write_to_sheet(spreadsheet, sheet_names, "GetReport", messages)
@@ -798,3 +952,5 @@ if __name__ == "__main__":
             except Exception:
                 pass
         print("✅ Hoàn tất toàn bộ công việc!")
+        if has_error:
+            raise RuntimeError(f"Gặp lỗi khi mở chat '{chat}' trên Teams để gửi báo cáo.")
