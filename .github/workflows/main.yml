@@ -67,8 +67,10 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON || secrets.GOOGLE_CREDENTIALS }}
           TEAMS_EMAIL: ${{ secrets.TEAMS_EMAIL }}
-          TEAMS_PASSWORD: ${{ secrets.TEAMS_PASSWORD }}
-        run: python get_report.py
+        run: |
+          # Chờ ngẫu nhiên 5-25s để tránh nghẽn tải đúng đầu giờ tại Microsoft / Azure
+          sleep $((RANDOM % 20 + 5))
+          python get_report.py
       
       - name: Upload Screenshot
         if: always()
