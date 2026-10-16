@@ -162,6 +162,10 @@ def get_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--no-first-run")
+    options.add_argument("--no-default-browser-check")
+    options.add_argument("--disable-background-networking")
     options.add_argument("--window-size=1920,1080")
     options.page_load_strategy = "eager"
     options.add_argument("--lang=en-GB")
@@ -187,10 +191,14 @@ def get_driver():
     except Exception:
         chrome_version = get_installed_chrome_major_version()
 
-    if chrome_version:
-        driver = uc.Chrome(options=options, version_main=chrome_version)
-    else:
-        driver = uc.Chrome(options=options)
+    try:
+        if chrome_version:
+            driver = uc.Chrome(options=options, version_main=chrome_version)
+        else:
+            driver = uc.Chrome(options=options)
+    except Exception as e:
+        print(f"❌ Lỗi khi khởi động undetected_chromedriver: {e}")
+        raise e
 
     try:
         driver.execute_cdp_cmd(
@@ -200,21 +208,24 @@ def get_driver():
     except Exception:
         pass
 
-    driver.execute_cdp_cmd(
-        "Page.addScriptToEvaluateOnNewDocument",
-        {
-            "source": """
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            window.navigator.chrome = { runtime: {} };
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-            Object.defineProperty(navigator, 'languages', { get: () => ['en-GB', 'en-US', 'en'] });
-            Object.defineProperty(navigator, 'credentials', {
-                get: () => undefined
-            });
+    try:
+        driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {
+                "source": """
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.navigator.chrome = { runtime: {} };
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-GB', 'en-US', 'en'] });
+                Object.defineProperty(navigator, 'credentials', {
+                    get: () => undefined
+                });
 
-            window.PublicKeyCredential = undefined;
-        """
-        },
-    )
+                window.PublicKeyCredential = undefined;
+            """
+            },
+        )
+    except Exception as e:
+        print(f"⚠️ Cảnh báo cấu hình CDP script (bỏ qua): {e}")
 
     return driver

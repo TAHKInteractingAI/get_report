@@ -35,7 +35,7 @@ def dismiss_teams_popups(driver):
         # 2. Đóng banner Turn on notifications / What's new / Dismiss
         close_banner_btns = driver.find_elements(
             By.XPATH,
-            '//button[contains(@aria-label, "Dismiss") or contains(@aria-label, "Đóng") or contains(@aria-label, "Close") or contains(., "Dismiss") or contains(., "Not now")]',
+            '//button[contains(@aria-label, "Dismiss") or contains(@aria-label, "Đóng") or contains(@aria-label, "Close") or contains(., "Dismiss") or contains(., "Not now") or contains(., "Got it") or contains(., "Không phải lúc này")]',
         )
         for btn in close_banner_btns:
             try:
@@ -58,7 +58,9 @@ def ensure_chat_tab(driver):
                     By.XPATH,
                     '//button[contains(@data-tid, "app-bar-chat") '
                     'or contains(@aria-label, "Chat") '
-                    'or contains(@aria-label, "Trò chuyện")]',
+                    'or contains(@aria-label, "Trò chuyện")] '
+                    '| //div[@role="tab"][contains(@data-tid, "app-bar-chat") or contains(@aria-label, "Chat") or contains(@aria-label, "Trò chuyện")] '
+                    '| //a[@role="tab"][contains(@data-tid, "app-bar-chat") or contains(@aria-label, "Chat") or contains(@aria-label, "Trò chuyện")]',
                 )
             )
         )
@@ -135,8 +137,8 @@ def send_message(driver, message):
 # =========================
 def open_chat(driver, chat_name):
     """Mở nhóm chat an toàn: chuyển tab Chat, xử lý popup, tìm trong danh sách và dùng Filter."""
-    wait = WebDriverWait(driver, 20)
     ensure_chat_tab(driver)
+    dismiss_teams_popups(driver)
 
     chat_item_xpath = (
         '//*[contains(@data-tid, "chat-list-item") '
@@ -146,8 +148,11 @@ def open_chat(driver, chat_name):
         'or @role="treeitem"]'
     )
 
+    # 1. Thử tìm trong danh sách chat đang hiển thị sẵn
     try:
-        wait.until(EC.presence_of_element_located((By.XPATH, chat_item_xpath)))
+        WebDriverWait(driver, 8).until(
+            EC.presence_of_element_located((By.XPATH, chat_item_xpath))
+        )
         groups = driver.find_elements(By.XPATH, chat_item_xpath)
 
         for g in groups:
@@ -185,11 +190,13 @@ def open_chat(driver, chat_name):
                 display_screenshot(driver, "after_opening_chat.png")
                 print(f"📂 Đã mở đúng nhóm: {chat_name}")
                 return True
-
+    except Exception as e:
         print(
-            f"⚠️ Không thấy {chat_name} ở danh sách ngoài, thử dùng thanh Filter..."
+            f"ℹ️ Không thấy '{chat_name}' ở danh sách ngoài ({e}). Thử tìm qua thanh Filter..."
         )
 
+    # 2. Thử mở nhóm bằng ô Filter / Search nếu không tìm thấy ở ngoài
+    try:
         try:
             filter_icon_xpath = (
                 '//button[@data-testid="simple-collab-left-rail-header-sticky-filter-v2-button"]'
@@ -207,7 +214,7 @@ def open_chat(driver, chat_name):
             ' | //input[@id="simple-collab-left-rail-sticky-filter-input-id"]'
             ' | //input[contains(@placeholder, "Filter") or contains(@placeholder, "Lọc")]'
         )
-        search = wait.until(
+        search = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, left_search_xpath))
         )
         search.click()
@@ -220,7 +227,7 @@ def open_chat(driver, chat_name):
             f"//*[contains(@data-tid, 'chat-list-item') or contains(@data-tid, 'chat-item') or @role='listitem' or @role='treeitem'][.//*[contains(text(), '{chat_name}')]] "
             f"| //span[contains(normalize-space(text()), '{chat_name}')]"
         )
-        filtered_result = wait.until(
+        filtered_result = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, filtered_result_xpath))
         )
         driver.execute_script("arguments[0].click();", filtered_result)
@@ -239,7 +246,9 @@ def open_chat(driver, chat_name):
 
     except Exception as e:
         display_screenshot(driver, "open_chat_error.png")
-        print(f"❌ Lỗi khi mở chat '{chat_name}': {e}")
+        print(
+            f"❌ Lỗi khi mở chat '{chat_name}' (URL: {driver.current_url}): {e}"
+        )
         return False
 
 
@@ -247,11 +256,12 @@ def open_chat(driver, chat_name):
 # LOGIN TEAMS
 # =========================
 def login():
-    driver = get_driver()
-    driver.get("https://teams.microsoft.com/")
-    wait = WebDriverWait(driver, 30)
-
+    driver = None
     try:
+        driver = get_driver()
+        driver.get("https://teams.microsoft.com/")
+        wait = WebDriverWait(driver, 30)
+
         print("⏳ Đang đăng nhập...")
 
         # 1. Xử lý nút Sign in
@@ -352,9 +362,31 @@ def login():
 
         print("✅ Đăng nhập tài khoản thành công")
 
-        print("⏳ Đang chờ giao diện Teams nạp xong (tối đa 45s)...")
+        print("⏳ Đang chờ giao diện Teams nạp xong (tối đa 75s)...")
         start_wait = time.time()
-        while time.time() - start_wait < 45:
+        max_wait = 75
+        while time.time() - start_wait < max_wait:
+            current_url = (driver.current_url or "").lower()
+
+            # Kiểm tra xem Microsoft có tạm khóa tài khoản hoặc chặn đăng nhập không
+            try:
+                body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+                if (
+                    "try again later" in body_text
+                    or "can't sign you in right now" in body_text
+                ):
+                    save_screenshot(driver, "try_again_later_blocked.png")
+                    print(
+                        f"❌ Microsoft tạm khóa phiên đăng nhập (Try again later / Can't sign in) tại: {driver.current_url}"
+                    )
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
+                    return None
+            except Exception:
+                pass
+
             try:
                 use_web_btn = driver.find_elements(
                     By.XPATH,
@@ -369,7 +401,6 @@ def login():
             except Exception:
                 pass
 
-            current_url = (driver.current_url or "").lower()
             is_login_domain = any(
                 d in current_url
                 for d in (
@@ -390,14 +421,55 @@ def login():
                 return driver
             time.sleep(3)
 
+        current_url = (driver.current_url or "").lower()
+        print(f"⚠️ Hết thời gian chờ {max_wait}s. URL hiện tại: {driver.current_url}")
+
+        if any(
+            d in current_url
+            for d in (
+                "login.microsoftonline.com",
+                "login.live.com",
+                "account.live.com",
+            )
+        ):
+            save_screenshot(driver, "login_stuck_on_auth.png")
+            print(
+                f"❌ Đăng nhập thất bại: Vẫn còn kẹt ở trang xác thực Microsoft sau {max_wait}s: {driver.current_url}"
+            )
+            try:
+                driver.quit()
+            except Exception:
+                pass
+            return None
+
+        nav_items = driver.find_elements(
+            By.XPATH,
+            '//button | //div[@role="button"] | //div[@role="tab"] | //div[@role="listitem"] | //*[@role="treeitem"]',
+        )
+        if len(nav_items) <= 5:
+            save_screenshot(driver, "login_ui_not_ready.png")
+            print(
+                f"❌ Đăng nhập thất bại: Giao diện Teams chưa tải xong sau {max_wait}s (chỉ có {len(nav_items)} controls). URL: {driver.current_url}"
+            )
+            try:
+                driver.quit()
+            except Exception:
+                pass
+            return None
+
+        print("✅ Giao diện Teams đã tải xong (sau thời gian chờ tối đa).")
         dismiss_teams_popups(driver)
         return driver
 
     except Exception as e:
-        save_screenshot(driver, "login_error.png")
         print("❌ Đăng nhập thất bại:", e)
-        try:
-            driver.quit()
-        except Exception:
-            pass
+        if driver:
+            try:
+                save_screenshot(driver, "login_error.png")
+            except Exception:
+                pass
+            try:
+                driver.quit()
+            except Exception:
+                pass
         return None
