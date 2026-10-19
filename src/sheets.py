@@ -9,6 +9,7 @@ from google.oauth2.service_account import Credentials
 from .config import (
     SCOPES,
     MESSAGE_PATTERN,
+    REPORT_INDICATOR_PATTERN,
     CHECKOUT_PATTERN,
     CHECKIN_PATTERN,
     RESET_PATTERN,
@@ -130,10 +131,19 @@ def is_valid_message(content):
     text = str(content).strip()
     if RESET_PATTERN.search(text):
         return False
+
+    has_report_content = bool(REPORT_INDICATOR_PATTERN.search(text))
     first_line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
-    if CHECKIN_PATTERN.search(first_line) and not CHECKOUT_PATTERN.search(first_line):
+
+    # Chỉ loại bỏ nếu dòng đầu là check in thuần túy (không có checkout và không có nội dung báo cáo công việc)
+    if (
+        CHECKIN_PATTERN.search(first_line)
+        and not CHECKOUT_PATTERN.search(first_line)
+        and not has_report_content
+    ):
         return False
-    return bool(MESSAGE_PATTERN.match(text))
+
+    return has_report_content or bool(MESSAGE_PATTERN.match(text))
 
 
 def _parse_sheet_row_datetime(date_val, time_val):
@@ -198,12 +208,15 @@ def get_filtered_messages(
                         continue
 
                     raw_content = str(row.get("CONTENT", "")).strip()
-
-                    if not is_valid_message(raw_content):
+                    if not raw_content:
                         continue
 
+                    # Tiền xử lý để tách dòng các trường bị dính liền (task:, kết quả:, link proof:,...)
                     content = preprocess_message(raw_content)
                     if not content:
+                        continue
+
+                    if not (is_valid_message(raw_content) or is_valid_message(content)):
                         continue
 
                     is_in_time = start_dt <= full_datetime <= end_dt

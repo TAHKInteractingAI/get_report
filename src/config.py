@@ -31,8 +31,12 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
+REPORT_INDICATOR_PATTERN = re.compile(
+    r"(?:check\s*[-_ ]?out|task\s*:|kết\s*quả|tiến\s*độ|link\s*proof|hoàn\s*thành|[+-]\s*\d+\s*/|apply\s*job)",
+    re.IGNORECASE,
+)
 MESSAGE_PATTERN = re.compile(
-    r".*(?:[+-]\s*\d+\s*/|check\s*[-_ ]?out).*",
+    r".*(?:[+-]\s*\d+\s*/|check\s*[-_ ]?out|task\s*:|kết\s*quả|tiến\s*độ|link\s*proof).*",
     re.IGNORECASE | re.DOTALL,
 )
 CHECKOUT_PATTERN = re.compile(r"check\s*[-_ ]?out", re.IGNORECASE)
